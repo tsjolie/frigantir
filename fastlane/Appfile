@@ -1,0 +1,2 @@
+app_identifier("net.sjolie.frigateapp")
+team_id(ENV["DEVELOPMENT_TEAM"])

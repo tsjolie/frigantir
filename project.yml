@@ -1,0 +1,128 @@
+# XcodeGen spec: the single source of truth for the Xcode project.
+# FrigateApp.xcodeproj is generated from this file (`make project`) and is not
+# committed, so there are never .pbxproj merge conflicts.
+name: FrigateApp
+options:
+  bundleIdPrefix: net.sjolie
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    # Swift 6.2 "approachable concurrency": code is main-actor by default, and
+    # performance-sensitive types (demuxer, stream engine, models) opt out with
+    # `nonisolated`.
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Your Apple Developer Team ID (10 characters). Export it or put it in
+    # a git-ignored `.env` file; see README.
+    DEVELOPMENT_TEAM: ${DEVELOPMENT_TEAM}
+
+targets:
+  FrigateApp:
+    type: application
+    platform: iOS
+    sources:
+      - FrigateApp
+    dependencies:
+      - target: FrigantirNotificationService
+    entitlements:
+      path: FrigateApp/FrigateApp.entitlements
+      properties:
+        # Push notifications. Xcode switches this to "production" when a build
+        # is exported for TestFlight / the App Store.
+        aps-environment: development
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.sjolie.frigateapp
+        PRODUCT_NAME: FrigateApp
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+    info:
+      path: FrigateApp/Info.plist
+      properties:
+        CFBundleDisplayName: Frigantir
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        # Keeps the process (and the live stream's WebSocket) running while audio
+        # plays with the app in the background; also required for Picture in Picture.
+        UIBackgroundModes: [audio]
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSLocalNetworkUsageDescription: Connects to your Frigate server on the local network.
+        NSAppTransportSecurity:
+          # Allows plain-HTTP connections to LAN addresses (e.g. http://192.168.1.10:5000).
+          # Public hostnames still require HTTPS.
+          NSAllowsLocalNetworking: true
+        ITSAppUsesNonExemptEncryption: false
+
+  # Adds review thumbnails to push notifications (see notifier/README.md).
+  FrigantirNotificationService:
+    type: app-extension
+    platform: iOS
+    sources:
+      - FrigantirNotificationService
+      - FrigateApp/Core/Notifications/NotificationThumbnail.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.sjolie.frigateapp.NotificationService
+        PRODUCT_NAME: FrigantirNotificationService
+        CODE_SIGN_STYLE: Automatic
+        SKIP_INSTALL: YES
+        # A small callback-driven extension; it doesn't need main-actor default isolation.
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+    info:
+      path: FrigantirNotificationService/Info.plist
+      properties:
+        CFBundleDisplayName: Frigantir Notifications
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
+        NSAppTransportSecurity:
+          # Same as the app: plain HTTP only for a notification server on the LAN.
+          NSAllowsLocalNetworking: true
+
+  FrigateAppTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - FrigateAppTests
+    dependencies:
+      - target: FrigateApp
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: net.sjolie.frigateapp.tests
+
+schemes:
+  FrigateApp:
+    build:
+      targets:
+        FrigateApp: all
+        FrigateAppTests: [test]
+    test:
+      gatherCoverageData: true
+      coverageTargets: [FrigateApp]
+      targets: [FrigateAppTests]
+    archive:
+      config: Release

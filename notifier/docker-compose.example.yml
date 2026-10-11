@@ -1,0 +1,28 @@
+# Copy to docker-compose.yml, put your settings in .env (see .env.example),
+# and place the APNs key at ./secrets/AuthKey.p8.
+services:
+  notifier:
+    image: frigate-notifier:latest
+    build: .
+    container_name: frigate-notifier
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APNS_KEY_FILE: /run/secrets/apns_key
+      DATA_DIR: /data
+      # Optional: notification thumbnails (needs both). Can also go in .env.
+      # PUBLIC_URL: https://notify.example.com
+      # FRIGATE_URL: http://frigate:5000
+    secrets:
+      - apns_key
+    volumes:
+      - notifier-data:/data
+    ports:
+      - "8080:8080"
+
+secrets:
+  apns_key:
+    file: ./secrets/AuthKey.p8
+
+volumes:
+  notifier-data:

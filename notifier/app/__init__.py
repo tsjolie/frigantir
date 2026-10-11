@@ -1,0 +1,1 @@
+"""Frigantir push-notification relay."""

@@ -1,0 +1,18 @@
+included:
+  - FrigateApp
+  - FrigateAppTests
+  - FrigantirNotificationService
+disabled_rules:
+  - identifier_name     # short names like r, w, h, id are idiomatic in parsing code
+  - force_unwrapping
+  - todo
+  - trailing_comma      # the codebase uses trailing commas in multi-line literals for clean diffs
+line_length:
+  warning: 140
+  error: 200
+type_body_length:
+  warning: 400
+file_length:
+  warning: 600
+function_body_length:
+  warning: 80
