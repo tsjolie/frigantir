@@ -27,9 +27,21 @@ project.yml            XcodeGen spec (source of truth for the Xcode project)
 FrigateApp/            app sources: App, Core (API, storage), Playback, Features
 FrigateAppTests/       unit tests + synthetic fMP4 fixture
 notifier/              push notification relay (Docker); see notifier/README.md
+ci_scripts/            Xcode Cloud hooks (generates the Xcode project after cloning)
 fastlane/              test / certificates / beta lanes
 docs/                  project plan, App Store submission guide, privacy policy
 ```
+
+## Releasing
+
+Builds for TestFlight and the App Store come from **Xcode Cloud** (Product →
+Xcode Cloud in Xcode; builds and settings are in App Store Connect → Xcode
+Cloud). Apple's servers clone this repo, and `ci_scripts/ci_post_clone.sh`
+generates `FrigateApp.xcodeproj` with XcodeGen, because the project isn't
+committed. The workflow archives the app, uploads it and hands it to the
+TestFlight groups. Xcode Cloud sets the build number, so don't also upload
+builds from Xcode by hand. See [docs/APP_STORE.md](docs/APP_STORE.md) for the
+App Store submission.
 
 ## License
 
