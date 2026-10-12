@@ -120,6 +120,19 @@ def test_cooldown_per_device_and_camera(store, make_notifier, clock):
     assert run(n.handle(message("new", id="r4"))) == [TOKEN_A]
 
 
+def test_review_suppressed_by_cooldown_stays_quiet(store, make_notifier, clock):
+    # Seen in production: the cooldown blocked a review's `new`, then its `end`
+    # arrived after the cooldown expired and notified, minutes late.
+    add_device(store, TOKEN_A, ["alert"])
+    clock.t = 1791293688.0
+    n = make_notifier(cooldown_seconds=300)
+    assert run(n.handle(message("new", id="r1"))) == [TOKEN_A]
+    clock.t += 60
+    assert run(n.handle(message("new", id="r2"))) == []
+    clock.t += 300  # cooldown over
+    assert run(n.handle(message("end", id="r2", start_time=clock.t - 300))) == []
+
+
 def test_malformed_messages_ignored(store, make_notifier):
     add_device(store, TOKEN_A, ["alert"])
     n = make_notifier()

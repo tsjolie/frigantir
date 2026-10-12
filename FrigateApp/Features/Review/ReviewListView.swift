@@ -10,7 +10,6 @@ struct ReviewListView: View {
     @State private var error: String?
     /// Only the newest reload may update the list; older ones finish too late.
     @State private var loadGeneration = 0
-    @State private var path: [ReviewItem] = []
 
     /// Hides items just marked reviewed, even before the server confirms.
     private var visibleItems: [ReviewItem] {
@@ -18,7 +17,7 @@ struct ReviewListView: View {
     }
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack {
             List {
                 ForEach(visibleItems) { item in
                     NavigationLink(value: item) { ReviewRow(item: item) }
@@ -56,7 +55,6 @@ struct ReviewListView: View {
                         .disabled(visibleItems.isEmpty)
                 }
             }
-            .task(id: model.reviewToOpen) { await openRequestedReview() }
             .refreshable { await reload() }
             .task(id: severity) { await reload() }
             // Frigate pushed a review change. It sends one every few seconds while
@@ -86,19 +84,6 @@ struct ReviewListView: View {
             guard generation == loadGeneration, !Task.isCancelled, (error as? URLError)?.code != .cancelled else { return }
             self.error = error.localizedDescription
         }
-    }
-
-    /// Shows the review a tapped notification was about.
-    private func openRequestedReview() async {
-        guard let id = model.reviewToOpen, let client = model.client else { return }
-        var item = items.first { $0.id == id }
-        if item == nil {
-            item = try? await client.review(id: id)
-        }
-        if let item { path = [item] }
-        // Clear the request last: it's this task's id, so changing it cancels
-        // the task, and with it a fetch that's still running.
-        if model.reviewToOpen == id { model.reviewToOpen = nil }
     }
 
     private func loadMore() async {

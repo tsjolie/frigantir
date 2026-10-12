@@ -37,6 +37,18 @@ import Testing
         #expect(!item.isInProgress)
     }
 
+    /// The notification server's registration contract (notifier/README.md).
+    @Test func encodesNotifierRegistration() throws {
+        let registration = NotifierClient.Registration(
+            token: "abcd", environment: "production", bundleID: "net.sjolie.frigateapp", deviceName: "iPhone",
+            severities: ["alert"], cameras: ["front"], ignoreVerified: true)
+        let json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(registration)) as? [String: Any])
+        #expect(json["ignore_verified"] as? Bool == true)
+        #expect(json["bundle_id"] as? String == "net.sjolie.frigateapp")
+        #expect(json["device_name"] as? String == "iPhone")
+        #expect(json["cameras"] as? [String] == ["front"])
+    }
+
     @Test func decodesConfigAndKeepsCameraNames() throws {
         let json = """
         {"cameras":{

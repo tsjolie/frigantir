@@ -48,7 +48,8 @@ def main() -> None:
         media = FrigateMedia(settings, store)
         signer = Signer(settings.api_token)
         thumb_url = lambda review_id, now: thumbnail_url(settings.public_url, signer, review_id, now)  # noqa: E731
-    notifier = Notifier(store, apns, settings.cameras, settings.cooldown_seconds, thumbnail_url=thumb_url)
+    notifier = Notifier(store, apns, settings.cameras, settings.cooldown_seconds, thumbnail_url=thumb_url,
+                        verify_wait_seconds=settings.verify_wait_seconds)
     state = SourceState(settings.source)
 
     @contextlib.asynccontextmanager

@@ -4,49 +4,73 @@ import SwiftUI
 /// opens from a camera's live view.
 struct RootView: View {
     @Environment(AppModel.self) private var model
-    @State private var selectedTab = AppTab.live
 
-    enum AppTab: Hashable { case live, review, explore, settings }
+    /// What's shown full screen over the tabs. There's one slot, so a new
+    /// request replaces whatever is showing (SwiftUI dismisses it and presents
+    /// the new one), instead of being lost behind it.
+    enum Presentation: Identifiable, Hashable {
+        /// A camera reopened from Picture in Picture or the now-playing bar.
+        case camera(String)
+        /// A review from a tapped notification.
+        case review(String)
+
+        var id: Self { self }
+    }
+
+    /// A notification's review takes precedence over a camera; closing the
+    /// review goes back to the camera.
+    private var presentation: Presentation? {
+        if let id = model.presentedReviewID { return .review(id) }
+        if let camera = model.playback.cameraToPresent { return .camera(camera) }
+        return nil
+    }
 
     var body: some View {
-        let playback = model.playback
-        let presentingCamera = Binding(
-            get: { playback.cameraToPresent != nil },
-            set: { if !$0 { playback.cameraToPresent = nil } })
-
         if model.isConfigured {
-            TabView(selection: $selectedTab) {
-                Tab("Live", systemImage: "video", value: .live) {
+            TabView {
+                Tab("Live", systemImage: "video") {
                     LiveDashboardView()
                 }
-                Tab("Review", systemImage: "exclamationmark.bubble", value: .review) {
+                Tab("Review", systemImage: "exclamationmark.bubble") {
                     ReviewListView()
                 }
                 .badge(model.reviewSummary?.last24Hours.unreviewedAlerts ?? 0)
-                Tab("Explore", systemImage: "magnifyingglass", value: .explore) {
+                Tab("Explore", systemImage: "magnifyingglass") {
                     ExploreView()
                 }
-                Tab("Settings", systemImage: "gear", value: .settings) {
+                Tab("Settings", systemImage: "gear") {
                     NavigationStack { SettingsView() }
                 }
             }
-            // A tapped notification: the Review tab opens the review.
-            .onChange(of: model.reviewToOpen, initial: true) {
-                if model.reviewToOpen != nil { selectedTab = .review }
-            }
-            // Returning from Picture in Picture opens the camera it was showing.
-            .fullScreenCover(isPresented: presentingCamera) {
-                if let name = playback.cameraToPresent, let camera = model.config?.cameras[name] {
-                    NavigationStack {
-                        CameraLiveView(camera: camera)
-                            .toolbar {
-                                Button("Done") { playback.cameraToPresent = nil }
-                            }
-                    }
+            // Full-screen covers can't be swiped away; each closes through its
+            // Done button, which clears the state above. So the binding only reads.
+            .fullScreenCover(item: Binding(get: { presentation }, set: { _ in })) { presentation in
+                switch presentation {
+                case .camera(let name):
+                    cameraCover(name)
+                case .review(let id):
+                    NotificationReviewView(reviewID: id)
                 }
             }
         } else {
             NavigationStack { SettingsView(isOnboarding: true) }
+        }
+    }
+
+    @ViewBuilder
+    private func cameraCover(_ name: String) -> some View {
+        NavigationStack {
+            if let camera = model.config?.cameras[name] {
+                CameraLiveView(camera: camera)
+                    .toolbar {
+                        Button("Done") { model.playback.cameraToPresent = nil }
+                    }
+            } else {
+                ContentUnavailableView("Camera unavailable", systemImage: "video.slash")
+                    .toolbar {
+                        Button("Done") { model.playback.cameraToPresent = nil }
+                    }
+            }
         }
     }
 }

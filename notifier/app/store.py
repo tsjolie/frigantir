@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS devices (
     device_name TEXT NOT NULL DEFAULT '',
     severities  TEXT NOT NULL,
     cameras     TEXT NOT NULL,
+    ignore_verified INTEGER NOT NULL DEFAULT 0,
     created_at  REAL NOT NULL,
     updated_at  REAL NOT NULL
 );
@@ -48,6 +49,10 @@ class Store:
         self._lock = threading.Lock()
         with self._lock:
             self._db.executescript(SCHEMA)
+            # Databases created before the column existed.
+            columns = {row["name"] for row in self._db.execute("PRAGMA table_info(devices)")}
+            if "ignore_verified" not in columns:
+                self._db.execute("ALTER TABLE devices ADD COLUMN ignore_verified INTEGER NOT NULL DEFAULT 0")
 
     # --- devices -----------------------------------------------------------
     @staticmethod
@@ -55,22 +60,23 @@ class Store:
         d = dict(row)
         d["severities"] = json.loads(d["severities"])
         d["cameras"] = json.loads(d["cameras"])
+        d["ignore_verified"] = bool(d["ignore_verified"])
         return d
 
     def upsert_device(self, token: str, environment: str, bundle_id: str, device_name: str,
-                      severities: list[str], cameras: list[str]) -> dict:
+                      severities: list[str], cameras: list[str], ignore_verified: bool = False) -> dict:
         now = time.time()
         with self._lock:
             self._db.execute(
                 """INSERT INTO devices (token, environment, bundle_id, device_name, severities, cameras,
-                                        created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                        ignore_verified, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(token) DO UPDATE SET environment=excluded.environment,
                        bundle_id=excluded.bundle_id, device_name=excluded.device_name,
                        severities=excluded.severities, cameras=excluded.cameras,
-                       updated_at=excluded.updated_at""",
+                       ignore_verified=excluded.ignore_verified, updated_at=excluded.updated_at""",
                 (token, environment, bundle_id, device_name, json.dumps(severities),
-                 json.dumps(cameras), now, now),
+                 json.dumps(cameras), int(ignore_verified), now, now),
             )
         return self.get_device(token)  # type: ignore[return-value]
 
