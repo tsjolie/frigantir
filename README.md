@@ -6,7 +6,6 @@ works as a baby monitor with the phone locked, Picture in Picture, and push
 notifications through a small self-hosted relay ([notifier/](notifier/README.md)).
 
 * **Requirements:** Xcode 26 or newer, iOS 18+ device, Frigate 0.14+ (built against 0.18)
-* **Plan and architecture:** [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md)
 
 ## Quick start
 
@@ -29,7 +28,7 @@ FrigateAppTests/       unit tests + synthetic fMP4 fixture
 notifier/              push notification relay (Docker); see notifier/README.md
 ci_scripts/            Xcode Cloud hooks (generates the Xcode project after cloning)
 fastlane/              test / certificates / beta lanes
-docs/                  project plan, App Store submission guide, privacy policy
+docs/                  privacy policy and support page (published at frigantir.sjolie.net)
 ```
 
 ## Releasing
@@ -40,8 +39,7 @@ Cloud). Apple's servers clone this repo, and `ci_scripts/ci_post_clone.sh`
 generates `FrigateApp.xcodeproj` with XcodeGen, because the project isn't
 committed. The workflow archives the app, uploads it and hands it to the
 TestFlight groups. Xcode Cloud sets the build number, so don't also upload
-builds from Xcode by hand. See [docs/APP_STORE.md](docs/APP_STORE.md) for the
-App Store submission.
+builds from Xcode by hand.
 
 ## License
 

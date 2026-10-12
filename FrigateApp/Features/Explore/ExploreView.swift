@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The PWA's Explore page: tracked objects, filterable by camera and label.
-/// (Semantic search and face/LPR browsing are later phases; see the project plan.)
+/// (Semantic search and face/LPR browsing are later phases.)
 struct ExploreView: View {
     @Environment(AppModel.self) private var model
     @State private var camera: String?
