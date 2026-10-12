@@ -121,7 +121,8 @@ final class PushNotifications {
                 bundleID: Bundle.main.bundleIdentifier ?? "net.sjolie.frigateapp",
                 deviceName: UIDevice.current.name,
                 severities: settings.includeDetections ? ["alert", "detection"] : ["alert"],
-                cameras: settings.cameras))
+                cameras: settings.cameras,
+                ignoreVerified: settings.ignoreRecognizedPeople))
             status = .registered
         } catch {
             status = .failed(error.localizedDescription)
@@ -164,6 +165,9 @@ struct NotificationSettings: Codable, Equatable {
     var includeDetections = false
     /// Cameras to notify about; empty means all.
     var cameras: [String] = []
+    /// Skip alerts whose objects are all people Frigate's face recognition
+    /// identified (`person-verified`). Filtered by the notification server.
+    var ignoreRecognizedPeople = false
 
     private static let defaultsKey = "notificationSettings"
 
@@ -176,6 +180,7 @@ struct NotificationSettings: Codable, Equatable {
         serverURL = try container.decodeIfPresent(URL.self, forKey: .serverURL)
         includeDetections = try container.decodeIfPresent(Bool.self, forKey: .includeDetections) ?? false
         cameras = try container.decodeIfPresent([String].self, forKey: .cameras) ?? []
+        ignoreRecognizedPeople = try container.decodeIfPresent(Bool.self, forKey: .ignoreRecognizedPeople) ?? false
     }
 
     static func load() -> NotificationSettings {
@@ -201,11 +206,13 @@ nonisolated struct NotifierClient: Sendable {
         let deviceName: String
         let severities: [String]
         let cameras: [String]
+        let ignoreVerified: Bool
 
         enum CodingKeys: String, CodingKey {
             case token, environment, severities, cameras
             case bundleID = "bundle_id"
             case deviceName = "device_name"
+            case ignoreVerified = "ignore_verified"
         }
     }
 

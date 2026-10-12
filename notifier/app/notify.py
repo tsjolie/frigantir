@@ -13,11 +13,27 @@ from .store import Store, short_token
 
 log = logging.getLogger("notifier.notify")
 
+VERIFIED_PERSON = "person-verified"
+
+
+def recognized_only(review: dict) -> bool:
+    """Every object in the review is a person Frigate's face recognition knows."""
+    objects = (review.get("data") or {}).get("objects") or []
+    return bool(objects) and all(o == VERIFIED_PERSON for o in objects)
+
+
+def may_still_be_recognized(review: dict) -> bool:
+    """Only people, at least one not recognized yet. Face recognition often
+    finishes a few seconds after a review starts."""
+    objects = (review.get("data") or {}).get("objects") or []
+    return "person" in objects and all(o in ("person", VERIFIED_PERSON) for o in objects)
+
 
 class Notifier:
     def __init__(self, store: Store, sender: Sender, cameras: list[str] | None = None,
                  cooldown_seconds: int = 0, clock: Callable[[], float] = time.time,
-                 thumbnail_url: Callable[[str, float], str] | None = None):
+                 thumbnail_url: Callable[[str, float], str] | None = None,
+                 verify_wait_seconds: float = 10):
         self.store = store
         self.sender = sender
         self.cameras = set(cameras or [])
@@ -25,6 +41,11 @@ class Notifier:
         self.clock = clock
         self.thumbnail_url = thumbnail_url  # (review_id, now) -> signed URL, when enabled
         self._last_sent: dict[tuple[str, str], float] = {}  # (token, camera) -> ts
+        # Devices with "ignore recognized people" hold person-only alerts this
+        # long for face recognition to finish, then decide on the latest data.
+        self.verify_wait = verify_wait_seconds
+        self._latest: dict[str, dict] = {}  # review id -> newest "after", while a hold is pending
+        self._held: dict[tuple[str, str], asyncio.Task] = {}  # (review id, token) -> hold
 
     #: An alert first seen in an `update` or `end` message still notifies if it
     #: started this recently. Frigate doesn't always send `new`: audio reviews
@@ -62,6 +83,8 @@ class Notifier:
 
         now = self.clock()
         self.store.prune(now)
+        if any(key[0] == review_id for key in self._held):
+            self._latest[review_id] = review
         targets = []
         for device in self.store.list_devices():
             token = device["token"]
@@ -71,22 +94,81 @@ class Notifier:
                 continue
             if self.store.was_notified(review_id, token):
                 continue
-            if self.cooldown and now - self._last_sent.get((token, camera), 0) < self.cooldown:
-                log.debug("Cooldown active for %s on %s", short_token(token), camera)
+            if device.get("ignore_verified"):
+                # Not claimed, so a later message (say, an unrecognized person
+                # joining) can still notify.
+                if recognized_only(review):
+                    log.debug("Skipping %s for %s: recognized person", review_id, short_token(token))
+                    continue
+                if may_still_be_recognized(review) and self.verify_wait > 0:
+                    self._hold(review_id, token, review, severity)
+                    continue
+            if not self._claim(review_id, token, camera, now):
                 continue
-            if not self.store.claim(review_id, token, now):
-                continue
-            self._last_sent[(token, camera)] = now
             targets.append(device)
 
         if not targets:
             return []
-        thumb = self.thumbnail_url(review_id, now) if self.thumbnail_url and review.get("thumb_path") else None
-        payload = review_payload(review, thumb)
         log.info("Review %s (%s, %s, %s): notifying %d device(s)", review_id, camera, severity,
                  message.get("type"), len(targets))
+        return await self._send(review, targets, now)
+
+    def _claim(self, review_id: str, token: str, camera: str, now: float) -> bool:
+        if self.cooldown and now - self._last_sent.get((token, camera), 0) < self.cooldown:
+            # Record the review as handled: otherwise its later `update`/`end`
+            # messages would notify once the cooldown ran out, minutes late.
+            self.store.claim(review_id, token, now)
+            log.info("Review %s: %s within cooldown on %s, not notifying", review_id, short_token(token), camera)
+            return False
+        if not self.store.claim(review_id, token, now):
+            return False
+        self._last_sent[(token, camera)] = now
+        return True
+
+    async def _send(self, review: dict, targets: list[dict], now: float) -> list[str]:
+        review_id = review["id"]
+        thumb = self.thumbnail_url(review_id, now) if self.thumbnail_url and review.get("thumb_path") else None
+        payload = review_payload(review, thumb)
         results = await asyncio.gather(*(self.deliver(d, payload, review_id) for d in targets))
         return [d["token"] for d, r in zip(targets, results) if r.ok]
+
+    def _hold(self, review_id: str, token: str, review: dict, severity: str) -> None:
+        key = (review_id, token)
+        if key in self._held:
+            return
+        self._latest[review_id] = review
+        log.info("Review %s: holding %ss for face recognition (%s)", review_id, self.verify_wait,
+                 short_token(token))
+        self._held[key] = asyncio.create_task(self._release(review_id, token, severity))
+
+    async def _release(self, review_id: str, token: str, severity: str) -> None:
+        """After the hold: notify unless the review now shows only recognized people."""
+        try:
+            await asyncio.sleep(self.verify_wait)
+            review = self._latest.get(review_id) or {}
+            device = self.store.get_device(token)
+            if not device or not review or self.store.was_notified(review_id, token):
+                return
+            if severity not in device["severities"]:
+                return
+            if device.get("ignore_verified") and recognized_only(review):
+                log.info("Review %s: recognized person, not notifying %s", review_id, short_token(token))
+                return
+            now = self.clock()
+            if not self._claim(review_id, token, review.get("camera", ""), now):
+                return
+            log.info("Review %s (%s, %s, held): notifying 1 device(s)", review_id, review.get("camera"),
+                     severity)
+            await self._send(review, [device], now)
+        finally:
+            self._held.pop((review_id, token), None)
+            if not any(key[0] == review_id for key in self._held):
+                self._latest.pop(review_id, None)
+
+    async def drain(self) -> None:
+        """Wait for pending holds (tests, shutdown)."""
+        while self._held:
+            await asyncio.gather(*list(self._held.values()), return_exceptions=True)
 
     async def deliver(self, device: dict, payload: dict, collapse_id: str) -> ApnsResult:
         token = device["token"]

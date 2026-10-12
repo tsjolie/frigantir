@@ -22,8 +22,9 @@ final class AppModel {
     let playback = PlaybackManager()
     let events = FrigateEventStream()
     let push = PushNotifications()
-    /// A review to show, e.g. from a tapped notification; the Review tab opens it.
-    var reviewToOpen: String?
+    /// The review a tapped notification is about. RootView shows it full screen
+    /// over whatever is on screen until it's closed.
+    private(set) var presentedReviewID: String?
 
     var isConfigured: Bool { client != nil }
 
@@ -105,8 +106,14 @@ final class AppModel {
         await refreshSummary()
     }
 
+    /// Shows a review (from a notification) over everything else. A newer one
+    /// replaces it.
     func open(reviewID: String) {
-        reviewToOpen = reviewID
+        presentedReviewID = reviewID
+    }
+
+    func closeReview() {
+        presentedReviewID = nil
     }
 
     /// Reloads the Review badge counts. Responses can arrive out of order, and a

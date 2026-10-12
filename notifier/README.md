@@ -332,7 +332,8 @@ iPhone ──GET <PUBLIC_URL>/api/v1/thumbnails/<review id>?expires=…&sig=…�
 | `FRIGATE_VERIFY_TLS` | `true`                  | Set `false` for self-signed Frigate certificates. |
 | `PUBLIC_URL`         | – (thumbnails off)      | The notifier's base URL as phones reach it, e.g. `https://notify.example.com`. With `FRIGATE_URL`, this enables [thumbnails](#notification-thumbnails). |
 | `CAMERAS`            | – (all)                 | Comma-separated allowlist of cameras that may trigger notifications. |
-| `COOLDOWN_SECONDS`   | `0` (off)               | Minimum seconds between pushes for the same device and camera. |
+| `COOLDOWN_SECONDS`   | `0` (off)               | Minimum seconds between pushes for the same device and camera. A review that starts during the cooldown is skipped entirely, including its later messages. |
+| `VERIFY_WAIT_SECONDS`| `10`                    | For devices that skip recognized people: how long to hold a person-only alert while Frigate's face recognition runs. `0` decides immediately. |
 | `DATA_DIR`           | `/data`                 | Where the SQLite database (`notifier.sqlite3`) is stored. |
 | `PORT`               | `8080`                  | HTTP listen port. |
 | `LOG_LEVEL`          | `INFO`                  | `DEBUG`, `INFO`, `WARNING` or `ERROR`. |
@@ -351,6 +352,12 @@ never contain secrets, and device tokens are truncated to their first 8 characte
   replaying old reviews.
 - Each push Apple accepts is logged with its `apns-id`. If a logged push doesn't appear on the device, look
   at the device: Focus modes, Settings → Notifications → Frigantir, and notification grouping.
+- **Recognized people** (devices registered with `ignore_verified: true`, the app's "Skip alerts for
+  recognized people"): an alert whose objects are all `person-verified` (Frigate face recognition knew
+  everyone) isn't sent. Audio labels don't count either way. An alert with any unrecognized person or any
+  other object is sent. Face recognition usually finishes a few seconds after a review starts, so a
+  person-only alert that isn't recognized yet is held for `VERIFY_WAIT_SECONDS`, then sent unless it has
+  become recognized. If a stranger or another object shows up during the hold, it's sent right away.
 - A device is never notified twice for the same review (remembered for 24 h). Each device's camera list,
   `CAMERAS` and `COOLDOWN_SECONDS` all apply.
 - Pushes for the same review share an `apns-collapse-id`, so they replace each other in Notification Center.
@@ -367,13 +374,15 @@ Registers a device, or updates it if the token is already registered.
 ```json
 {"token": "<hex APNs device token>", "environment": "sandbox",
  "bundle_id": "net.sjolie.frigateapp", "device_name": "Tristan's iPhone",
- "severities": ["alert", "detection"], "cameras": []}
+ "severities": ["alert", "detection"], "cameras": [], "ignore_verified": false}
 ```
 
 - `token`: a hex string, required. It's stored in lowercase.
 - `environment`: `sandbox` or `production`, required.
 - `severities`: a non-empty subset of `["alert", "detection"]`. Defaults to `["alert"]`.
 - `cameras`: a list of camera names. `[]` means all cameras.
+- `ignore_verified`: `true` to skip alerts showing only people Frigate recognized (`person-verified`).
+  Optional, defaults to `false`.
 - `bundle_id` and `device_name`: optional.
 
 Returns `200` with the stored device (the same fields plus `created_at` and `updated_at`), or `400`

@@ -51,6 +51,9 @@ def validate_device(body: object, default_bundle_id: str) -> dict:
     cameras = body.get("cameras") or []
     if not isinstance(cameras, list) or any(not isinstance(c, str) or not c for c in cameras):
         raise Invalid("cameras must be a list of camera names")
+    ignore_verified = body.get("ignore_verified", False)
+    if not isinstance(ignore_verified, bool):
+        raise Invalid("ignore_verified must be true or false")
     return {
         "token": token.lower(),
         "environment": environment,
@@ -58,6 +61,7 @@ def validate_device(body: object, default_bundle_id: str) -> dict:
         "device_name": device_name,
         "severities": [s for s in SEVERITIES if s in severities],
         "cameras": list(dict.fromkeys(cameras)),
+        "ignore_verified": ignore_verified,
     }
 
 
@@ -90,9 +94,9 @@ def create_app(notifier: Notifier, state: SourceState, api_token: str, default_b
         except Invalid as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
         device = store.upsert_device(**fields)
-        log.info("Registered %s (%s, %s, severities=%s, cameras=%s)", short_token(device["token"]),
-                 device["device_name"] or "unnamed", device["environment"], device["severities"],
-                 device["cameras"] or "all")
+        log.info("Registered %s (%s, %s, severities=%s, cameras=%s, ignore_verified=%s)",
+                 short_token(device["token"]), device["device_name"] or "unnamed", device["environment"],
+                 device["severities"], device["cameras"] or "all", device["ignore_verified"])
         return JSONResponse(device)
 
     async def unregister(request: Request) -> Response:

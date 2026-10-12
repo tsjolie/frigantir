@@ -56,7 +56,11 @@ def test_register_and_upsert(client, store):
     d = r.json()
     assert d["token"] == TOKEN_A and d["environment"] == "production"
     assert d["severities"] == ["alert", "detection"] and d["cameras"] == ["front_door"]
+    assert d["ignore_verified"] is False  # defaults off for apps that don't send it
     assert store.count_devices() == 1
+
+    r = client.post("/api/v1/devices", headers=AUTH, json=device_body(ignore_verified=True))
+    assert r.status_code == 200 and r.json()["ignore_verified"] is True
 
 
 @pytest.mark.parametrize("overrides", [
@@ -65,6 +69,7 @@ def test_register_and_upsert(client, store):
     {"severities": []}, {"severities": ["alert", "motion"]}, {"severities": "alert"},
     {"cameras": "front_door"}, {"cameras": [1]},
     {"device_name": 5},
+    {"ignore_verified": "yes"}, {"ignore_verified": 1},
 ])
 def test_register_validation(client, overrides):
     r = client.post("/api/v1/devices", json=device_body(**overrides), headers=AUTH)

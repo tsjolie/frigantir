@@ -42,6 +42,7 @@ class Settings:
     public_url: str = ""
     cameras: list[str] = field(default_factory=list)
     cooldown_seconds: int = 0
+    verify_wait_seconds: int = 10
     data_dir: str = "/data"
     port: int = 8080
     log_level: str = "INFO"
@@ -108,6 +109,7 @@ class Settings:
             public_url=get("PUBLIC_URL", "").rstrip("/"),
             cameras=_list(env.get("CAMERAS")),
             cooldown_seconds=as_int("COOLDOWN_SECONDS", 0),
+            verify_wait_seconds=as_int("VERIFY_WAIT_SECONDS", 10),
             data_dir=get("DATA_DIR", "/data"),
             port=as_int("PORT", 8080),
             log_level=get("LOG_LEVEL", "INFO").upper(),

@@ -9,6 +9,7 @@ struct NotificationSettingsView: View {
     @State private var serverText = ""
     @State private var apiToken = ""
     @State private var includeDetections = false
+    @State private var ignoreRecognizedPeople = false
     @State private var allCameras = true
     @State private var selectedCameras: Set<String> = []
     @State private var isSaving = false
@@ -38,11 +39,12 @@ struct NotificationSettingsView: View {
                     .autocorrectionDisabled()
             }
 
-            Section("Notify me about") {
+            Section {
                 Picker("Severity", selection: $includeDetections) {
                     Text("Alerts").tag(false)
                     Text("Alerts and detections").tag(true)
                 }
+                Toggle("Skip alerts for recognized people", isOn: $ignoreRecognizedPeople)
                 Toggle("All cameras", isOn: $allCameras)
                 if !allCameras {
                     ForEach(model.config?.dashboardCameras ?? []) { camera in
@@ -51,6 +53,14 @@ struct NotificationSettingsView: View {
                             set: { if $0 { selectedCameras.insert(camera.name) } else { selectedCameras.remove(camera.name) } }))
                     }
                 }
+            } header: {
+                Text("Notify me about")
+            } footer: {
+                Text("""
+                    Recognized people are ones Frigate's face recognition identified ("person-verified"). \
+                    Alerts with an unrecognized person or anything else still notify. The server waits a \
+                    few seconds for recognition, so these person alerts arrive slightly later.
+                    """)
             }
 
             Section {
@@ -84,6 +94,7 @@ struct NotificationSettingsView: View {
         serverText = settings.serverURL?.absoluteString ?? ""
         apiToken = push.apiToken
         includeDetections = settings.includeDetections
+        ignoreRecognizedPeople = settings.ignoreRecognizedPeople
         allCameras = settings.cameras.isEmpty
         selectedCameras = Set(settings.cameras)
     }
@@ -93,6 +104,7 @@ struct NotificationSettingsView: View {
         settings.isEnabled = isEnabled
         settings.serverURL = serverURL
         settings.includeDetections = includeDetections
+        settings.ignoreRecognizedPeople = ignoreRecognizedPeople
         settings.cameras = allCameras ? [] : selectedCameras.sorted()
         isSaving = true
         testResult = nil
