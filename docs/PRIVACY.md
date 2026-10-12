@@ -4,7 +4,7 @@
 
 This policy explains how **Frigantir** (the "app"), an iOS client for the Frigate network video recorder,
 handles your information. Frigantir is developed by Tristan Sjolie ("I", "me"). Published at
-<https://privacy.example.com/frigantir>.
+<the app's website>.
 
 ## Summary
 
