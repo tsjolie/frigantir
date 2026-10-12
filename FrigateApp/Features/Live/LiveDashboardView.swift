@@ -114,7 +114,8 @@ private struct LivePreview: View {
         .allowsHitTesting(false)
         .onAppear {
             let player = LivePlayer(camera: camera, stream: stream,
-                                    request: client.liveStreamRequest(stream: stream), isPreview: true)
+                                    request: client.liveStreamRequest(stream: stream), isPreview: true,
+                                    reauthorize: { [client] in try? await client.login() })
             player.play()
             self.player = player
         }

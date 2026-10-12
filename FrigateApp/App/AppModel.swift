@@ -57,7 +57,7 @@ final class AppModel {
         do {
             config = try await client.config()
             loadError = nil
-            events.connect(url: client.eventsWebSocketURL())
+            events.connect(url: client.eventsWebSocketURL(), onUnauthorized: { try? await client.login() })
             await refreshSummary()
         } catch {
             loadError = error.localizedDescription

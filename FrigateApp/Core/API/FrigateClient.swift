@@ -43,7 +43,7 @@ nonisolated struct FrigateClient: Sendable {
     /// Every review item on one camera that overlaps a time range, reviewed or
     /// not. Frigate filters on one review state per request, so ask for both.
     func reviews(camera: String, after: Date, before: Date) async throws -> [ReviewItem] {
-        func page(reviewed: Bool) async throws -> [ReviewItem] {
+        @Sendable func page(reviewed: Bool) async throws -> [ReviewItem] {
             try await get("api/review", query: [
                 URLQueryItem(name: "cameras", value: camera),
                 URLQueryItem(name: "after", value: String(after.timeIntervalSince1970)),

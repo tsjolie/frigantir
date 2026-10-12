@@ -21,7 +21,9 @@ final class FrigateEventStream {
         handlers.append(handler)
     }
 
-    func connect(url: URL, session: URLSession = .shared) {
+    /// `onUnauthorized` logs in to Frigate again; it's called when the socket
+    /// is refused with 401 (Frigate's login cookie expired) before reconnecting.
+    func connect(url: URL, session: URLSession = .shared, onUnauthorized: (@Sendable () async -> Void)? = nil) {
         disconnect()
         loop = Task { [weak self] in
             var attempt = 0
@@ -44,6 +46,9 @@ final class FrigateEventStream {
 
                 isConnected = false
                 task.cancel()
+                if (task.response as? HTTPURLResponse)?.statusCode == 401, let onUnauthorized {
+                    await onUnauthorized()
+                }
                 attempt += 1
                 try? await Task.sleep(for: .seconds(min(30, pow(2, Double(attempt)))))
             }

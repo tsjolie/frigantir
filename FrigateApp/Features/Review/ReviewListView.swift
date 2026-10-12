@@ -91,12 +91,14 @@ struct ReviewListView: View {
     /// Shows the review a tapped notification was about.
     private func openRequestedReview() async {
         guard let id = model.reviewToOpen, let client = model.client else { return }
-        model.reviewToOpen = nil
-        if let item = items.first(where: { $0.id == id }) {
-            path = [item]
-        } else if let item = try? await client.review(id: id) {
-            path = [item]
+        var item = items.first { $0.id == id }
+        if item == nil {
+            item = try? await client.review(id: id)
         }
+        if let item { path = [item] }
+        // Clear the request last: it's this task's id, so changing it cancels
+        // the task, and with it a fetch that's still running.
+        if model.reviewToOpen == id { model.reviewToOpen = nil }
     }
 
     private func loadMore() async {

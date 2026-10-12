@@ -64,7 +64,8 @@ final class PlaybackManager {
         }
         active?.close()
 
-        let player = LivePlayer(camera: camera, stream: stream, request: client.liveStreamRequest(stream: stream))
+        let player = LivePlayer(camera: camera, stream: stream, request: client.liveStreamRequest(stream: stream),
+                                reauthorize: { try? await client.login() })
         player.onPictureInPictureChanged = { [weak self, weak player] isActive in
             guard let self, let player else { return }
             // PiP closed while the camera screen is gone: nothing is showing it anymore.

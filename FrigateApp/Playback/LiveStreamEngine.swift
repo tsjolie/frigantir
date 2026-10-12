@@ -67,6 +67,11 @@ nonisolated final class LiveStreamEngine: NSObject, @unchecked Sendable {
     /// Called on the main actor.
     var onStateChange: (@MainActor @Sendable (State) -> Void)?
     var onMetrics: (@MainActor @Sendable (Metrics) -> Void)?
+    /// Logs in to Frigate again. Called when the stream's WebSocket is refused
+    /// with 401, which happens once Frigate's login cookie expires (24 h by
+    /// default) on a stream left running, e.g. a baby monitor overnight.
+    /// Set before `start`.
+    var onUnauthorized: (@Sendable () async -> Void)?
 
     private let tuning: Tuning
     private let queue = DispatchQueue(label: "LiveStreamEngine", qos: .userInitiated)
@@ -95,6 +100,7 @@ nonisolated final class LiveStreamEngine: NSObject, @unchecked Sendable {
     private var bytesSinceTick = 0
     private var metrics = Metrics()
     private var pathSatisfied = true
+    private var reauthAttempts = 0
 
     /// The display layer's renderer, captured on the main actor so the media
     /// queue never touches the (main-actor) layer itself. Enqueueing and flushing
@@ -348,6 +354,7 @@ nonisolated final class LiveStreamEngine: NSObject, @unchecked Sendable {
         if !latestPTS.isValid || end > latestPTS { latestPTS = end }
         if state != .playing {
             attempt = 0
+            reauthAttempts = 0
             setState(.playing)
         }
     }
@@ -364,6 +371,13 @@ nonisolated final class LiveStreamEngine: NSObject, @unchecked Sendable {
 
     private func connectionFailed(_ reason: String, task failedTask: URLSessionWebSocketTask?) {
         guard failedTask === task, request != nil else { return }
+        // A refused handshake reports through whichever callback fires first
+        // (receive, send or the delegate), so the 401 check lives here.
+        if (failedTask?.response as? HTTPURLResponse)?.statusCode == 401, let failedTask,
+           onUnauthorized != nil, reauthAttempts < 2 {
+            reauthorize(after: failedTask)
+            return
+        }
         teardownConnection()
         attempt += 1
         let backoff = min(tuning.maxBackoff, 0.5 * pow(2, Double(attempt - 1)))
@@ -374,6 +388,25 @@ nonisolated final class LiveStreamEngine: NSObject, @unchecked Sendable {
         queue.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self, generation == scheduled, request != nil else { return }
             connect()
+        }
+    }
+
+    /// The handshake was refused with 401: log in again, then reconnect, rather
+    /// than retrying with the expired cookie forever. Gives up after two tries
+    /// (wrong password) and falls back to the normal backoff.
+    private func reauthorize(after failedTask: URLSessionWebSocketTask) {
+        guard failedTask === task, request != nil, let onUnauthorized else { return }
+        reauthAttempts += 1
+        teardownConnection()
+        setState(.reconnecting(attempt: attempt + 1, delay: 0))
+        let scheduled = generation
+        Task { [weak self] in
+            await onUnauthorized()
+            guard let self else { return }
+            queue.async {
+                guard self.generation == scheduled, self.request != nil else { return }
+                self.connect()
+            }
         }
     }
 

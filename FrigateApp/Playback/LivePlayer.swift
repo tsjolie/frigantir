@@ -30,12 +30,16 @@ final class LivePlayer: Identifiable {
     @ObservationIgnored private let request: URLRequest
 
     /// `isPreview`: a silent dashboard tile, with no audio and no Picture in Picture.
-    init(camera: String, stream: String, request: URLRequest, isPreview: Bool = false) {
+    /// `reauthorize` logs in to Frigate again when the stream is refused (see
+    /// `LiveStreamEngine.onUnauthorized`).
+    init(camera: String, stream: String, request: URLRequest, isPreview: Bool = false,
+         reauthorize: (@Sendable () async -> Void)? = nil) {
         self.camera = camera
         self.stream = stream
         self.request = request
         displayLayer.videoGravity = .resizeAspect
         engine = LiveStreamEngine(displayLayer: displayLayer, includesAudio: !isPreview)
+        engine.onUnauthorized = reauthorize
 
         engine.onStateChange = { [weak self] state in self?.state = state }
         engine.onMetrics = { [weak self] metrics in self?.metrics = metrics }

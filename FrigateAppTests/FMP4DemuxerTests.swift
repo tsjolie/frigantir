@@ -68,7 +68,11 @@ private final class BundleToken {}
 
         let pts = result.videoSamples.map { CMSampleBufferGetPresentationTimeStamp($0).seconds }
         #expect(pts == pts.sorted())
-        #expect(abs(pts[1] - pts[0] - 1.0 / 15) < 0.001)
+        // ffmpeg stretches the first frame of a fragmented file (2008 instead of
+        // 1024 ticks at 15360 Hz), so check the spacing from the second frame on.
+        let gaps = zip(pts.dropFirst(2), pts.dropFirst()).map { $0 - $1 }
+        #expect(gaps.count == 28)
+        #expect(gaps.allSatisfy { abs($0 - 1.0 / 15) < 0.001 })
 
         let packets = result.audioSamples.map(CMSampleBufferGetNumSamples).reduce(0, +)
         #expect(packets >= 31) // ≈ 2 s of 1024-sample AAC frames at 16 kHz
