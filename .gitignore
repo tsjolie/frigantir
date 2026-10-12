@@ -32,3 +32,7 @@ AuthKey_*.p8
 *.swp
 *.swo
 *~
+
+# Private planning / App Store submission notes (kept locally, not published)
+docs/APP_STORE.md
+docs/PROJECT_PLAN.md

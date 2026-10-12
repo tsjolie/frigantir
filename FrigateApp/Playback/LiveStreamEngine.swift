@@ -124,7 +124,7 @@ nonisolated final class LiveStreamEngine: NSObject, @unchecked Sendable {
 
         // iOS 27 deprecates addRenderer/enqueue/flush in favour of
         // `sampleBufferReceiver(adding:)`; the classic API is kept while the
-        // deployment target is below 27 (see docs/PROJECT_PLAN.md, Phase 6).
+        // deployment target is below 27.
         synchronizer.addRenderer(videoRenderer)
         if includesAudio {
             synchronizer.addRenderer(audioRenderer)
