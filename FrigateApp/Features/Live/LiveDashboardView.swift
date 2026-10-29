@@ -1,11 +1,39 @@
 import SwiftUI
 
 /// The PWA's Live dashboard: camera groups and a grid of camera tiles.
+///
+/// Pinch the grid to resize the tiles, like the Photos grid: apart for bigger
+/// tiles (fewer per row), together for smaller ones. The size is remembered.
 struct LiveDashboardView: View {
     @Environment(AppModel.self) private var model
     @AppStorage("dashboardGroup") private var group = ""
+    /// The narrowest a tile may be; as many columns as fit at this width are shown.
+    @AppStorage("dashboardTileWidth") private var tileWidth = 320.0
+    /// The pinch in progress, applied on top of `tileWidth` until it ends.
+    @GestureState private var pinch: CGFloat = 1
+    @State private var gridWidth: CGFloat = 0
 
-    private let columns = [GridItem(.adaptive(minimum: 320), spacing: 8)]
+    private static let spacing: CGFloat = 8
+    private static let smallestTile: CGFloat = 150
+
+    /// Width available to the tiles, inside the grid's padding.
+    private var availableWidth: CGFloat { max(0, gridWidth - 2 * Self.spacing) }
+
+    private func columnCount(forTileWidth width: CGFloat) -> Int {
+        guard availableWidth > 0 else { return 1 }
+        let clamped = min(max(width, Self.smallestTile), availableWidth)
+        return max(1, Int((availableWidth + Self.spacing) / (clamped + Self.spacing)))
+    }
+
+    private var columnCount: Int { columnCount(forTileWidth: tileWidth * pinch) }
+
+    /// The tile width that shows `count` columns, for stepping one at a time.
+    private func tileWidth(forColumns count: Int) -> Double {
+        let count = CGFloat(max(1, count))
+        return Double((availableWidth - (count - 1) * Self.spacing) / count)
+    }
+
+    private var maxColumns: Int { columnCount(forTileWidth: Self.smallestTile) }
 
     var body: some View {
         NavigationStack {
@@ -14,7 +42,9 @@ struct LiveDashboardView: View {
                     ContentUnavailableView("Can't reach Frigate", systemImage: "wifi.exclamationmark",
                                            description: Text(error))
                 } else {
-                    LazyVGrid(columns: columns, spacing: 8) {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Self.spacing),
+                                             count: columnCount),
+                              spacing: Self.spacing) {
                         ForEach(model.cameras(in: group.isEmpty ? nil : group)) { camera in
                             NavigationLink(value: camera) {
                                 CameraTile(camera: camera)
@@ -22,7 +52,28 @@ struct LiveDashboardView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding(8)
+                    .padding(Self.spacing)
+                    .animation(.snappy, value: columnCount)
+                }
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
+            // Simultaneous, so scrolling and tapping tiles keep working.
+            .simultaneousGesture(
+                MagnifyGesture()
+                    .updating($pinch) { value, pinch, _ in pinch = value.magnification }
+                    .onEnded { value in
+                        // Store the width of the column count the pinch landed on, so
+                        // the next pinch starts from what's on screen.
+                        let count = columnCount(forTileWidth: tileWidth * value.magnification)
+                        tileWidth = tileWidth(forColumns: count)
+                    }
+            )
+            .accessibilityZoomAction { action in
+                let count = columnCount
+                switch action.direction {
+                case .zoomIn: tileWidth = tileWidth(forColumns: count - 1)
+                case .zoomOut: tileWidth = tileWidth(forColumns: min(maxColumns, count + 1))
+                @unknown default: break
                 }
             }
             .navigationTitle(group.isEmpty ? "Live" : group.cameraDisplayName)
