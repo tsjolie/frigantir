@@ -14,6 +14,21 @@ struct CameraHistoryView: View {
     /// Start of the span whose motion is already loaded.
     @State private var loadedFrom: Date?
     @State private var wasPlayingBeforeScrub = false
+    /// Picking an export span on the timeline.
+    @State private var exportPick: ExportPick?
+    /// The span the export sheet opens with.
+    @State private var exportRequest: ExportRequest?
+
+    enum ExportPick: Equatable {
+        case start
+        /// The start is marked; the span runs to wherever the timeline is now.
+        case end(from: Date)
+    }
+
+    struct ExportRequest: Identifiable {
+        let id = UUID()
+        let range: ClosedRange<Date>
+    }
 
     /// Recordings are kept for as long as Frigate's retention allows; the
     /// timeline starts with the last day and grows a day at a time.
@@ -26,7 +41,10 @@ struct CameraHistoryView: View {
             layout {
                 VStack(spacing: 0) {
                     video
-                    if let player { controls(player) }
+                    if let player {
+                        controls(player)
+                        if let exportPick { exportPickBar(exportPick, player: player) }
+                    }
                 }
                 .frame(maxWidth: landscape ? geometry.size.width * 0.62 : .infinity)
                 if let player { timeline(player) }
@@ -34,6 +52,24 @@ struct CameraHistoryView: View {
         }
         .navigationTitle("\(camera.name.cameraDisplayName) History")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button("Select on Timeline", systemImage: "hand.draw") { exportPick = .start }
+                    Button("Enter Start and End", systemImage: "calendar.badge.clock") {
+                        // Defaults to the five minutes before the playback position.
+                        let end = min(player?.currentDate ?? .now, .now)
+                        exportRequest = ExportRequest(range: end.addingTimeInterval(-300) ... end)
+                    }
+                } label: {
+                    Label("Export", systemImage: "square.and.arrow.up")
+                }
+                .disabled(player == nil || exportPick != nil)
+            }
+        }
+        .sheet(item: $exportRequest) { request in
+            ExportSheet(camera: camera, range: request.range)
+        }
         .onAppear(perform: start)
         .onDisappear {
             player?.close()
@@ -80,6 +116,50 @@ struct CameraHistoryView: View {
         .padding(.vertical, 10)
     }
 
+    /// Steps for picking an export span: scroll the timeline to each end and mark it.
+    private func exportPickBar(_ pick: ExportPick, player: HistoryPlayer) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                switch pick {
+                case .start:
+                    Text("Export: scroll to the start").font(.subheadline.bold())
+                    Text("Move the timeline so the line is at the first moment to export.")
+                case .end(let from):
+                    Text("Export: scroll to the end").font(.subheadline.bold())
+                    Text("From \(from.formatted(date: .omitted, time: .standard)) to the line.")
+                }
+            }
+            .font(.caption)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Button("Cancel") { exportPick = nil }
+            switch pick {
+            case .start:
+                Button("Set Start") {
+                    player.pause()
+                    exportPick = .end(from: player.currentDate)
+                }
+                .buttonStyle(.borderedProminent)
+            case .end(let from):
+                Button("Set End") {
+                    let to = player.currentDate
+                    exportRequest = ExportRequest(range: min(from, to) ... max(from, to))
+                    exportPick = nil
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(12)
+        .background(.regularMaterial, in: .rect(cornerRadius: 14))
+        .padding(.horizontal)
+        .padding(.bottom, 8)
+    }
+
+    /// The export span picked so far, from the marked start to the line.
+    private func exportSelection(_ player: HistoryPlayer) -> ClosedRange<Date>? {
+        guard case .end(let from) = exportPick else { return nil }
+        return min(from, player.currentDate) ... max(from, player.currentDate)
+    }
+
     private func timeline(_ player: HistoryPlayer) -> some View {
         ActivityTimeline(
             range: range,
@@ -87,6 +167,7 @@ struct CameraHistoryView: View {
             reviews: reviews,
             currentDate: player.currentDate,
             canLoadEarlier: range.upperBound.timeIntervalSince(range.lowerBound) < Double(Self.maxDays) * 86400,
+            selection: exportSelection(player),
             onScrubBegan: {
                 wasPlayingBeforeScrub = player.isPlaying
                 player.beginScrubbing()

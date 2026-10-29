@@ -1,5 +1,6 @@
 import AVFoundation
 import Observation
+import UIKit
 
 /// Plays one camera's recordings at any wall-clock time, for the History screen.
 ///
@@ -26,6 +27,7 @@ final class HistoryPlayer {
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private var timeObserver: Any?
     @ObservationIgnored private var endObserver: NSObjectProtocol?
+    @ObservationIgnored private var backgroundObserver: NSObjectProtocol?
     @ObservationIgnored private var isScrubbing = false
     /// Between swapping playlists and landing on the target time, the player
     /// reports position 0; ignore it so the timeline doesn't jump.
@@ -48,6 +50,13 @@ final class HistoryPlayer {
                 self.playNextHour()
             }
         }
+        // Recordings don't play in the background (only live cameras do); the
+        // app's audio session would otherwise keep this one going.
+        backgroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pause() }
+        }
     }
 
     /// Releases the player; call when the History screen goes away.
@@ -57,8 +66,10 @@ final class HistoryPlayer {
         player.replaceCurrentItem(with: nil)
         if let timeObserver { player.removeTimeObserver(timeObserver) }
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
+        if let backgroundObserver { NotificationCenter.default.removeObserver(backgroundObserver) }
         timeObserver = nil
         endObserver = nil
+        backgroundObserver = nil
     }
 
     func play() {

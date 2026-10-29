@@ -16,6 +16,15 @@ struct SnapshotView: View {
 
     @State private var image: UIImage?
 
+    /// Every still has a unique URL, so caching them only fills the disk.
+    /// The default configuration keeps the shared cookie store (Frigate's login).
+    private static let session: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: configuration)
+    }()
+
     var body: some View {
         ZStack {
             Color.black
@@ -30,7 +39,7 @@ struct SnapshotView: View {
         // Restarts when un-paused, so a fresh still loads straight away.
         .task(id: isPaused) {
             while !isPaused, !Task.isCancelled {
-                if let url = url(.now), let (data, _) = try? await URLSession.shared.data(from: url),
+                if let url = url(.now), let (data, _) = try? await Self.session.data(from: url),
                    let decoded = UIImage(data: data) {
                     image = decoded
                 }

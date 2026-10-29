@@ -23,7 +23,7 @@ struct NotificationSettingsView: View {
                 Toggle("Notifications", isOn: $isEnabled)
             } footer: {
                 Text("""
-                    Notifications come from a small server you run next to Frigate, which watches for \\
+                    Notifications come from a small server you run next to Frigate, which watches for \
                     new alerts and sends them through Apple. See notifier/README.md to set it up.
                     """)
             }
@@ -84,8 +84,7 @@ struct NotificationSettingsView: View {
     }
 
     private var serverURL: URL? {
-        let url = URL(string: serverText.trimmingCharacters(in: .whitespaces))
-        return url?.host == nil ? nil : url
+        URL.serverAddress(serverText)
     }
 
     private func loadFields() {

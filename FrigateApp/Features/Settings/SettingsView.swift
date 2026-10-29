@@ -10,12 +10,14 @@ struct SettingsView: View {
     @State private var keepAudio = true
     @State private var audioOnlyInBackground = true
     @State private var isSaving = false
+    /// Shown under the button when the address can't be used.
+    @State private var urlError: String?
     @AppStorage("livePreviews") private var livePreviews = true
 
     var body: some View {
         Form {
             Section {
-                TextField("https://frigate.example.com", text: $urlText)
+                TextField("frigate.example.com", text: $urlText)
                     .keyboardType(.URL)
                     .textContentType(.URL)
                     .textInputAutocapitalization(.never)
@@ -29,7 +31,11 @@ struct SettingsView: View {
             } header: {
                 Text("Frigate server")
             } footer: {
-                Text("Use Frigate's port 8971 (or your reverse proxy). Live video uses go2rtc through Frigate at /live/mse.")
+                Text("""
+                    Enter Frigate's address, e.g. frigate.example.com or 192.168.1.10:8971. HTTPS is used \
+                    unless the address starts with http://. Use Frigate's port 8971 (or your reverse proxy). \
+                    Live video uses go2rtc through Frigate at /live/mse.
+                    """)
             }
 
             Section {
@@ -61,9 +67,21 @@ struct SettingsView: View {
             }
 
             Section {
-                Button(isOnboarding ? "Connect" : "Save") { save() }
-                    .disabled(URL(string: urlText)?.host == nil || isSaving)
-                if let error = model.loadError {
+                Button {
+                    save()
+                } label: {
+                    HStack {
+                        Text(isOnboarding ? "Connect" : "Save")
+                        if isSaving {
+                            Spacer()
+                            ProgressView()
+                        }
+                    }
+                }
+                .disabled(isSaving)
+                if let urlError {
+                    Text(urlError).foregroundStyle(.red).font(.footnote)
+                } else if let error = model.loadError {
                     Text(error).foregroundStyle(.red).font(.footnote)
                 }
             }
@@ -77,6 +95,7 @@ struct SettingsView: View {
         }
         .navigationTitle(isOnboarding ? "Connect to Frigate" : "Settings")
         .onAppear(perform: loadFields)
+        .onChange(of: urlText) { urlError = nil }
     }
 
     private func loadFields() {
@@ -88,14 +107,24 @@ struct SettingsView: View {
     }
 
     private func save() {
+        guard let url = URL.serverAddress(urlText) else {
+            urlError = urlText.trimmingCharacters(in: .whitespaces).isEmpty
+                ? "Enter your Frigate server's address."
+                : "That isn't a valid address. Try something like frigate.example.com or https://192.168.1.10:8971."
+            return
+        }
+        // Show what will be used, e.g. with https:// added.
+        urlText = url.absoluteString
+        urlError = nil
         var settings = model.settings
-        settings.baseURL = URL(string: urlText.trimmingCharacters(in: .whitespaces))
+        settings.baseURL = url
         settings.username = username
         settings.keepAudioWhenLeavingCamera = keepAudio
         settings.audioOnlyAfterBackgroundSeconds = audioOnlyInBackground ? 10 : nil
         isSaving = true
         Task {
-            await model.update(settings: settings, password: password.isEmpty ? nil : password)
+            await model.update(settings: settings, password: password.isEmpty ? nil : password,
+                               requireConnection: isOnboarding)
             isSaving = false
         }
     }

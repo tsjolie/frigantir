@@ -373,7 +373,7 @@ Registers a device, or updates it if the token is already registered.
 
 ```json
 {"token": "<hex APNs device token>", "environment": "sandbox",
- "bundle_id": "net.sjolie.frigateapp", "device_name": "Tristan's iPhone",
+ "bundle_id": "net.sjolie.frigateapp", "device_name": "Alex's iPhone",
  "severities": ["alert", "detection"], "cameras": [], "ignore_verified": false}
 ```
 

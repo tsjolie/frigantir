@@ -164,6 +164,45 @@ nonisolated struct TrackedObject: Decodable, Sendable, Identifiable, Hashable {
     var startDate: Date { Date(timeIntervalSince1970: startTime) }
 }
 
+/// `/api/exports`: a span of recordings Frigate saved as an MP4.
+nonisolated struct FrigateExport: Decodable, Sendable, Identifiable, Hashable {
+    let id: String
+    let camera: String
+    let name: String
+    let date: Double
+    let videoPath: String
+    let thumbPath: String?
+    let inProgress: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id, camera, name, date
+        case videoPath = "video_path"
+        case thumbPath = "thumb_path"
+        case inProgress = "in_progress"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        camera = try container.decode(String.self, forKey: .camera)
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+        date = try container.decodeIfPresent(Double.self, forKey: .date) ?? 0
+        videoPath = try container.decode(String.self, forKey: .videoPath)
+        thumbPath = try container.decodeIfPresent(String.self, forKey: .thumbPath)
+        inProgress = try container.decodeIfPresent(Bool.self, forKey: .inProgress) ?? false
+    }
+
+    var createdDate: Date { Date(timeIntervalSince1970: date) }
+    var displayName: String { name.isEmpty ? camera.cameraDisplayName : name }
+
+    /// A name for the downloaded file: the export's name, made safe for a path.
+    var fileName: String {
+        let base = displayName.components(separatedBy: CharacterSet(charactersIn: "/\\:?%*|\"<>")).joined(separator: "-")
+        let ext = (videoPath as NSString).pathExtension
+        return base.trimmingCharacters(in: .whitespaces) + "." + (ext.isEmpty ? "mp4" : ext)
+    }
+}
+
 /// `/api/review/summary`: counts keyed by `last24Hours` and by `yyyy-MM-dd`.
 nonisolated struct ReviewSummary: Decodable, Sendable {
     var last24Hours: DayCounts
@@ -179,6 +218,13 @@ nonisolated struct ReviewSummary: Decodable, Sendable {
             case reviewedDetection = "reviewed_detection"
             case totalAlert = "total_alert"
             case totalDetection = "total_detection"
+        }
+
+        mutating func markAllReviewed(_ severity: ReviewItem.Severity) {
+            switch severity {
+            case .alert: reviewedAlert = totalAlert
+            case .detection: reviewedDetection = totalDetection
+            }
         }
 
         var unreviewedAlerts: Int { totalAlert - reviewedAlert }

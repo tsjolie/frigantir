@@ -29,6 +29,8 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Connects to your Frigate server on the local network.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Saves an exported recording to your photo library when you tap Download.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -14,9 +14,7 @@ struct FrigateViewerApp: App {
         }
         .onChange(of: scenePhase) { _, phase in
             model.playback.scenePhaseChanged(phase)
-            if phase == .active {
-                Task { await model.refreshSummary() }
-            }
+            model.scenePhaseChanged(phase)
         }
     }
 }

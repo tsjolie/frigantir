@@ -1,16 +1,21 @@
 import AVKit
 import SwiftUI
 
-/// Plays recorded footage (Frigate's HLS `/vod` playlists or `clip.mp4`) with
-/// the system player, which brings hardware decoding, scrubbing, AirPlay,
-/// background audio and Picture in Picture for free.
+/// Plays recorded footage (Frigate's HLS `/vod` playlists or export MP4s) with
+/// the system player, which brings hardware decoding, scrubbing and AirPlay.
+///
+/// Picture in Picture is only for live cameras, so recordings don't offer it,
+/// and they pause when the app goes to the background.
 struct RecordingPlayerView: UIViewControllerRepresentable {
     let url: URL
 
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeUIViewController(context: Context) -> AVPlayerViewController {
         let controller = AVPlayerViewController()
-        controller.allowsPictureInPicturePlayback = true
-        controller.canStartPictureInPictureAutomaticallyFromInline = true
+        controller.allowsPictureInPicturePlayback = false
+        controller.canStartPictureInPictureAutomaticallyFromInline = false
+        context.coordinator.controller = controller
         controller.player = makePlayer()
         controller.player?.play()
         return controller
@@ -23,8 +28,28 @@ struct RecordingPlayerView: UIViewControllerRepresentable {
         }
     }
 
-    static func dismantleUIViewController(_ controller: AVPlayerViewController, coordinator: ()) {
+    static func dismantleUIViewController(_ controller: AVPlayerViewController, coordinator: Coordinator) {
         controller.player?.pause()
+    }
+
+    final class Coordinator {
+        weak var controller: AVPlayerViewController?
+        // Set once in init; deinit only removes it.
+        nonisolated(unsafe) private var observer: NSObjectProtocol?
+
+        init() {
+            // The app keeps an audio session for live cameras, which would
+            // otherwise let a recording carry on playing in the background.
+            observer = NotificationCenter.default.addObserver(
+                forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.controller?.player?.pause() }
+            }
+        }
+
+        deinit {
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+        }
     }
 
     private func makePlayer() -> AVPlayer {

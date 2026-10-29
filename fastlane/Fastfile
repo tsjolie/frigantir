@@ -1,12 +1,9 @@
 # Lanes (run with `bundle exec fastlane <lane>`):
 #   test          generate the project and run unit tests on a simulator
-#   certificates  one-time: create/download signing certs + profiles into match
-#   beta          build a signed release and upload it to TestFlight
+#
+# Release builds come from Xcode Cloud (see README), not from here.
 default_platform(:ios)
 
-APP_ID = "net.sjolie.frigateapp"
-EXTENSION_ID = "#{APP_ID}.NotificationService"
-EXTENSION_TARGET = "FrigantirNotificationService"
 SCHEME = "FrigateApp"
 PROJECT = "FrigateApp.xcodeproj"
 
@@ -25,62 +22,6 @@ platform :ios do
       device: ENV.fetch("TEST_DEVICE", "iPhone 17"),
       result_bundle: true,
       output_directory: "fastlane/test_output",
-    )
-  end
-
-  desc "One-time setup: create signing certificates/profiles and store them with match"
-  lane :certificates do
-    api_key
-    match(type: "development", readonly: false)
-    match(type: "appstore", readonly: false)
-  end
-
-  desc "Build and upload to TestFlight"
-  lane :beta do
-    setup_ci # temporary keychain on CI runners; no-op locally
-    key = api_key
-    generate
-    match(type: "appstore", readonly: true, api_key: key)
-
-    build = ENV["GITHUB_RUN_NUMBER"] ||
-            (latest_testflight_build_number(app_identifier: APP_ID, api_key: key) + 1).to_s
-    increment_build_number(xcodeproj: PROJECT, build_number: build)
-
-    update_code_signing_settings(
-      path: PROJECT,
-      use_automatic_signing: false,
-      team_id: ENV["DEVELOPMENT_TEAM"],
-      targets: [SCHEME],
-      code_sign_identity: "Apple Distribution",
-      profile_name: ENV["sigh_#{APP_ID}_appstore_profile-name"],
-    )
-    update_code_signing_settings(
-      path: PROJECT,
-      use_automatic_signing: false,
-      team_id: ENV["DEVELOPMENT_TEAM"],
-      targets: [EXTENSION_TARGET],
-      code_sign_identity: "Apple Distribution",
-      profile_name: ENV["sigh_#{EXTENSION_ID}_appstore_profile-name"],
-    )
-
-    build_app(
-      project: PROJECT,
-      scheme: SCHEME,
-      export_method: "app-store",
-      output_directory: "build",
-    )
-
-    upload_to_testflight(api_key: key, skip_waiting_for_build_processing: true)
-  end
-
-  # App Store Connect API key (Users and Access → Integrations → Team Keys).
-  # APP_STORE_CONNECT_API_KEY_CONTENT is the .p8 file, base64-encoded.
-  private_lane :api_key do
-    app_store_connect_api_key(
-      key_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_ID"),
-      issuer_id: ENV.fetch("APP_STORE_CONNECT_API_ISSUER_ID"),
-      key_content: ENV.fetch("APP_STORE_CONNECT_API_KEY_CONTENT"),
-      is_key_content_base64: true,
     )
   end
 end

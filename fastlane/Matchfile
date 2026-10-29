@@ -1,7 +1,0 @@
-# fastlane match keeps the signing certificate and provisioning profiles,
-# encrypted with MATCH_PASSWORD, in a private git repo, so CI and every
-# Mac you use sign the app the same way.
-git_url(ENV["MATCH_GIT_URL"])
-storage_mode("git")
-type("appstore")
-app_identifier(["net.sjolie.frigateapp", "net.sjolie.frigateapp.NotificationService"])

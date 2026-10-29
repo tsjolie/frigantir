@@ -1,10 +1,9 @@
 # Frigantir — Privacy Policy
 
-*Effective date: October 11, 2026*
+*Effective date: October 29, 2026*
 
 This policy explains how **Frigantir** (the "app"), an iOS client for the Frigate network video recorder,
-handles your information. Frigantir is developed by Tristan Sjolie ("I", "me"). Published at
-<the app's website>.
+handles your information. Frigantir is developed by Tristan Sjolie ("I", "me").
 
 ## Summary
 
@@ -27,6 +26,7 @@ events, server addresses, passwords or usage of the app.
 | Your Frigate username and password | iOS Keychain | To sign in to your Frigate server |
 | Notification server address and access token | iOS Keychain / app settings | To register for notifications, only if you turn them on |
 | Notification thumbnails | Temporary storage on the device | To show a picture in a notification |
+| Export videos you download | The app's cache on the device | To play, save or share them without downloading again; removed when you delete the export in the app |
 
 This data stays on your device. It is not shared with me. Deleting the app removes it.
 
@@ -60,16 +60,22 @@ handled under [Apple's Privacy Policy](https://www.apple.com/legal/privacy/).
 
 Apart from these, the app makes no network connections.
 
+**Sharing.** When you share an exported video, it goes only where you send it from the iOS share sheet (for
+example Messages, AirDrop or Files).
+
 ## Information I don't collect
 
-The app does not collect or access your location, contacts, photos, microphone or camera, health data,
-advertising identifier, browsing history or any usage, diagnostic or crash data. It contains no third-party
+The app does not collect or access your location, contacts, microphone or camera, health data, advertising
+identifier, browsing history or any usage, diagnostic or crash data. It can't see the photos in your library:
+its only Photos access is adding a video when you ask it to (see Permissions). It contains no third-party
 analytics, advertising or tracking code, and it does not track you across other apps or websites.
 
 ## Permissions
 
 - **Local Network** — to connect to a Frigate or notification server on your home network.
 - **Notifications** — only if you turn on notifications, to show alerts from your notification server.
+- **Photos (add only)** — only when you tap Download on an export, to save that video to your photo library.
+  This permission lets the app add videos, not see your existing photos.
 
 You can change these at any time in the iOS Settings app.
 

@@ -3,7 +3,8 @@ import Foundation
 /// Frigate's `/ws` WebSocket: pushes `{"topic": ..., "payload": ...}` messages
 /// such as `reviews` (new/update/end review items), `events`, `camera_activity`
 /// and `stats`. The app uses it to refresh the Review badge and lists live
-/// instead of polling. Reconnects with backoff while the app is in the foreground.
+/// instead of polling. Reconnects with backoff; AppModel closes it while the
+/// app is in the background.
 @Observable
 final class FrigateEventStream {
     struct Message: Sendable {
@@ -13,6 +14,8 @@ final class FrigateEventStream {
     }
 
     private(set) var isConnected = false
+    /// Connected or reconnecting (between `connect` and `disconnect`).
+    var isRunning: Bool { loop != nil }
     private var task: URLSessionWebSocketTask?
     private var loop: Task<Void, Never>?
     private var handlers: [(Message) -> Void] = []

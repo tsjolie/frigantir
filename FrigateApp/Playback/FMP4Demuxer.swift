@@ -39,6 +39,11 @@ nonisolated final class FMP4Demuxer {
         var defaultFlags: UInt32 = 0
     }
 
+    /// Bytes kept while waiting for the rest of a box. go2rtc sends a fragment
+    /// per WebSocket message (at most 16 MB, see LiveStreamEngine), so more
+    /// than this means a corrupt size, not a slow network.
+    static let maxPendingBytes = 32 * 1024 * 1024
+
     private(set) var tracks: [UInt32: Track] = [:]
     private var buffer = Data()
     private var pendingMoof: Data?
@@ -79,6 +84,10 @@ nonisolated final class FMP4Demuxer {
         if consumed > 0 {
             buffer.removeSubrange(buffer.startIndex ..< buffer.startIndex + consumed)
         }
+        if buffer.count > Self.maxPendingBytes {
+            buffer = Data()
+            throw DemuxError.malformed("box larger than \(Self.maxPendingBytes / 1024 / 1024) MB")
+        }
         return outputs
     }
 
@@ -99,9 +108,11 @@ nonisolated final class FMP4Demuxer {
         var headerSize = 8
         var totalSize = Int(size32)
         if size32 == 1 {
-            guard let large = reader.uint64() else { return nil }
+            // A size Int can't hold is corrupt; treated as never complete,
+            // which `append`'s buffer limit turns into an error.
+            guard let large = reader.uint64(), let size = Int(exactly: large) else { return nil }
             headerSize = 16
-            totalSize = Int(large)
+            totalSize = size
         } else if size32 == 0 {
             totalSize = data.count - offset // box extends to end of data
         }
@@ -348,6 +359,12 @@ nonisolated final class FMP4Demuxer {
                 t.skip(1)
                 let flags = t.uint24() ?? 0
                 guard let count = t.uint32() else { throw DemuxError.malformed("trun") }
+                // Each optional per-sample field is 4 bytes. A count the box can't
+                // hold is corrupt; without this, a huge count of empty samples
+                // would loop billions of times.
+                let fieldsPerSample = [0x100, 0x200, 0x400, 0x800].filter { flags & $0 != 0 }.count
+                let maxCount = fieldsPerSample > 0 ? t.remaining / (4 * fieldsPerSample) : mdatPayload.count
+                guard Int(count) <= maxCount else { throw DemuxError.malformed("trun sample count") }
                 if flags & 0x001 != 0 { nextDataOffset = Int(Int32(bitPattern: t.uint32() ?? 0)) }
                 let firstFlags = flags & 0x004 != 0 ? t.uint32() : nil
 

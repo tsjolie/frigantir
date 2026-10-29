@@ -2,8 +2,11 @@
 
 An unofficial native iOS client for [Frigate NVR](https://frigate.video) that replaces the
 PWA. It has low-latency live view decoded in hardware, background audio that
-works as a baby monitor with the phone locked, Picture in Picture, and push
-notifications through a small self-hosted relay ([notifier/](notifier/README.md)).
+works as a baby monitor with the phone locked, Picture in Picture for live
+cameras, a scrubbable recording history, the Review page (with "mark all
+reviewed" across every unreviewed item), exports you can create, download to
+Photos and share, and push notifications through a small self-hosted relay
+([notifier/](notifier/README.md)).
 
 * **Requirements:** Xcode 26 or newer, iOS 18+ device, Frigate 0.14+ (built against 0.18)
 
@@ -16,8 +19,8 @@ make open                      # generates FrigateApp.xcodeproj and opens Xcode
 ```
 
 Run on a simulator or device with ⌘R, then enter your Frigate URL on first
-launch (e.g. `https://frigate.example.com`). `make test` runs the unit tests and
-`make lint` runs SwiftLint.
+launch (e.g. `https://frigate.example.com`; `https://` is added if you leave it
+out). `make test` runs the unit tests and `make lint` runs SwiftLint.
 
 ## Layout
 
@@ -27,8 +30,8 @@ FrigateApp/            app sources: App, Core (API, storage), Playback, Features
 FrigateAppTests/       unit tests + synthetic fMP4 fixture
 notifier/              push notification relay (Docker); see notifier/README.md
 ci_scripts/            Xcode Cloud hooks (generates the Xcode project after cloning)
-fastlane/              test / certificates / beta lanes
-docs/                  privacy policy and support page (published at the app's website)
+fastlane/              test lane (used by `make test`)
+docs/                  privacy policy and support page (published on the app's website)
 ```
 
 ## Releasing

@@ -37,6 +37,24 @@ import Testing
         #expect(!item.isInProgress)
     }
 
+    /// App Review typed the address without a scheme; that has to work.
+    @Test(arguments: [
+        ("frigate.example.com", "https://frigate.example.com"),
+        ("  frigate.example.com/  ", "https://frigate.example.com"),
+        ("192.168.1.10:8971", "https://192.168.1.10:8971"),
+        ("nas.local:8971/frigate/", "https://nas.local:8971/frigate"),
+        ("http://192.168.1.10:5000", "http://192.168.1.10:5000"),
+        ("HTTPS://frigate.example.com", "https://frigate.example.com"),
+    ])
+    func parsesServerAddress(typed: String, expected: String) {
+        #expect(URL.serverAddress(typed)?.absoluteString == expected)
+    }
+
+    @Test(arguments: ["", "   ", "ftp://frigate.example.com", "https://", "not a host"])
+    func rejectsInvalidServerAddress(typed: String) {
+        #expect(URL.serverAddress(typed) == nil)
+    }
+
     /// The notification server's registration contract (notifier/README.md).
     @Test func encodesNotifierRegistration() throws {
         let registration = NotifierClient.Registration(
@@ -72,6 +90,12 @@ import Testing
          "2026-09-22":{"day":"2026-09-22","reviewed_alert":0,"reviewed_detection":0,"total_alert":78,"total_detection":63}}
         """.utf8))
         #expect(summary.last24Hours.unreviewedAlerts == 75)
+        var counts = summary.last24Hours
+        counts.markAllReviewed(.detection)
+        #expect(counts.unreviewedDetections == 0)
+        #expect(counts.unreviewedAlerts == 75)
+        counts.markAllReviewed(.alert)
+        #expect(counts.unreviewedAlerts == 0)
 
         let stats = try JSONDecoder().decode(FrigateStats.self, from: Data("""
         {"cameras":{"front":{"camera_fps":14.9,"detection_fps":2.1,"process_fps":5.0,"skipped_fps":0.0,"pid":1}},
@@ -91,6 +115,36 @@ import Testing
 
         let plain = FrigateClient(baseURL: URL(string: "http://192.168.1.10:5000")!)
         #expect(plain.eventsWebSocketURL().absoluteString == "ws://192.168.1.10:5000/ws")
+    }
+
+    @Test func decodesExportsAndBuildsTheirURLs() throws {
+        let json = """
+        [{"id":"driveway_ab12cd","camera":"driveway","name":"Package: 10/29","date":1790128888.5,
+          "video_path":"/media/frigate/exports/driveway_ab12cd.mp4",
+          "thumb_path":"/media/frigate/clips/export/driveway_ab12cd.webp","in_progress":false},
+         {"id":"garage_ef34","camera":"garage","name":null,"date":1790128999.0,
+          "video_path":"/media/frigate/exports/garage_ef34.mp4","thumb_path":null,"in_progress":true}]
+        """
+        let exports = try JSONDecoder().decode([FrigateExport].self, from: Data(json.utf8))
+        let first = try #require(exports.first)
+        #expect(client.exportVideoURL(first).absoluteString == "https://frigate.example.com/exports/driveway_ab12cd.mp4")
+        #expect(client.exportThumbnailURL(first)?.path == "/clips/export/driveway_ab12cd.webp")
+        #expect(first.fileName == "Package- 10-29.mp4")
+        #expect(exports[1].inProgress)
+        #expect(exports[1].displayName == "Garage")
+        #expect(client.exportThumbnailURL(exports[1]) == nil)
+    }
+
+    /// 12 AM is midnight and 12 PM is noon on the export time wheels.
+    @Test func convertsBetweenTwelveAndTwentyFourHourTime() {
+        #expect(TwelveHourClock(hour: 0) == TwelveHourClock(hourRow: 0, isPM: false))
+        #expect(TwelveHourClock(hour: 12) == TwelveHourClock(hourRow: 0, isPM: true))
+        #expect(TwelveHourClock(hour: 23) == TwelveHourClock(hourRow: 11, isPM: true))
+        #expect(TwelveHourClock.displayHour(row: 0) == 12)
+        #expect(TwelveHourClock.displayHour(row: 7) == 7)
+        for hour in 0 ..< 24 {
+            #expect(TwelveHourClock(hour: hour).hour == hour)
+        }
     }
 
     @Test func decodesWebSocketMessages() {

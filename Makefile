@@ -3,7 +3,7 @@
 -include .env
 export
 
-.PHONY: bootstrap project open test lint beta
+.PHONY: bootstrap project open test lint
 
 bootstrap: ## install tools (once per Mac)
 	brew install xcodegen swiftlint
@@ -21,6 +21,3 @@ test: ## unit tests on the simulator
 
 lint:
 	swiftlint lint
-
-beta: ## build + upload to TestFlight from this Mac
-	bundle exec fastlane beta

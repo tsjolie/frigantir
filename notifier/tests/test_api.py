@@ -22,7 +22,7 @@ def client(make_notifier):
 
 def device_body(**overrides):
     body = {"token": TOKEN_A, "environment": "sandbox", "bundle_id": "net.sjolie.frigateapp",
-            "device_name": "Tristan's iPhone", "severities": ["alert"], "cameras": []}
+            "device_name": "Alex's iPhone", "severities": ["alert"], "cameras": []}
     body.update(overrides)
     return body
 
@@ -47,7 +47,7 @@ def test_register_and_upsert(client, store):
     assert r.status_code == 200
     d = r.json()
     assert d["token"] == TOKEN_A and d["environment"] == "sandbox"
-    assert d["device_name"] == "Tristan's iPhone" and d["severities"] == ["alert"] and d["cameras"] == []
+    assert d["device_name"] == "Alex's iPhone" and d["severities"] == ["alert"] and d["cameras"] == []
 
     r = client.post("/api/v1/devices", headers=AUTH, json=device_body(
         token=TOKEN_A.upper(), environment="production", severities=["detection", "alert"],

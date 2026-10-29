@@ -212,7 +212,7 @@ final class PlaybackManager {
 
 extension String {
     /// "front_door" → "Front Door", the way Frigate's UI labels cameras.
-    var cameraDisplayName: String {
+    nonisolated var cameraDisplayName: String {
         replacingOccurrences(of: "_", with: " ").capitalized
     }
 }

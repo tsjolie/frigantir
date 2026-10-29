@@ -33,6 +33,27 @@ struct ServerSettings: Codable, Equatable, Sendable {
     }
 }
 
+extension URL {
+    /// Parses a server address as typed: `frigate.example.com`,
+    /// `192.168.1.10:8971/frigate` or a full `http(s)://` URL. A missing scheme
+    /// means HTTPS. `nil` if it isn't a usable web address.
+    nonisolated static func serverAddress(_ text: String) -> URL? {
+        var text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        if text.range(of: "^[a-zA-Z][a-zA-Z0-9+.-]*://", options: .regularExpression) == nil {
+            text = "https://" + text
+        }
+        guard var components = URLComponents(string: text),
+              let scheme = components.scheme?.lowercased(), ["http", "https"].contains(scheme),
+              let host = components.host, !host.isEmpty
+        else { return nil }
+        components.scheme = scheme
+        // Paths are appended to the base URL; a trailing slash would double up.
+        while components.path.hasSuffix("/") { components.path.removeLast() }
+        return components.url
+    }
+}
+
 /// Minimal Keychain wrapper for the Frigate password.
 enum Keychain {
     private static let service = "net.sjolie.frigateapp"

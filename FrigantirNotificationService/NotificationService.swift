@@ -27,7 +27,8 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
 
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 20
-        let task = URLSession(configuration: configuration).dataTask(with: url) { [self] data, response, _ in
+        let session = URLSession(configuration: configuration)
+        let task = session.dataTask(with: url) { [self] data, response, _ in
             if let data, (response as? HTTPURLResponse)?.statusCode == 200,
                let attachment = NotificationThumbnail.attachment(from: data) {
                 lock.withLock { self.content?.attachments = [attachment] }
@@ -36,6 +37,8 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
         }
         lock.withLock { download = task }
         task.resume()
+        // Releases the session (and its delegate queue) once the download ends.
+        session.finishTasksAndInvalidate()
     }
 
     override func serviceExtensionTimeWillExpire() {

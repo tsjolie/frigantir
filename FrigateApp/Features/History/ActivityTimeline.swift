@@ -12,6 +12,8 @@ struct ActivityTimeline: View {
     let reviews: [ReviewItem]
     let currentDate: Date
     var canLoadEarlier = true
+    /// A span being picked for export, highlighted across the hours it covers.
+    var selection: ClosedRange<Date>?
 
     var onScrubBegan: () -> Void = {}
     var onScrub: (Date) -> Void = { _ in }
@@ -37,7 +39,8 @@ struct ActivityTimeline: View {
                         ForEach(hours, id: \.self) { hour in
                             TimelineHourView(hourEnd: hour,
                                              motion: motion(inHourEndingAt: hour),
-                                             reviews: reviews(inHourEndingAt: hour))
+                                             reviews: reviews(inHourEndingAt: hour),
+                                             selection: selection(inHourEndingAt: hour))
                                 .frame(height: Self.hourHeight)
                                 .contentShape(.rect)
                                 .onTapGesture { location in
@@ -114,6 +117,15 @@ struct ActivityTimeline: View {
         return motion.filter { $0.startTime >= end - 3600 && $0.startTime < end }
     }
 
+    /// The part of the selection in one hour, so hours outside it don't redraw
+    /// while it changes.
+    private func selection(inHourEndingAt hourEnd: Date) -> ClosedRange<Date>? {
+        guard let selection else { return nil }
+        let lower = max(selection.lowerBound, hourEnd.addingTimeInterval(-3600))
+        let upper = min(selection.upperBound, hourEnd)
+        return lower < upper ? lower ... upper : nil
+    }
+
     private func reviews(inHourEndingAt hourEnd: Date) -> [ReviewItem] {
         let start = hourEnd.timeIntervalSince1970 - 3600
         let end = hourEnd.timeIntervalSince1970
@@ -127,6 +139,7 @@ private struct TimelineHourView: View {
     let hourEnd: Date
     let motion: [MotionActivity]
     let reviews: [ReviewItem]
+    let selection: ClosedRange<Date>?
 
     private static let labelWidth: CGFloat = 52
 
@@ -154,6 +167,15 @@ private struct TimelineHourView: View {
                 context.fill(Path(roundedRect: CGRect(x: size.width - 7, y: top, width: 5, height: height),
                                   cornerRadius: 2.5),
                              with: .color(color))
+            }
+
+            if let selection {
+                let top = y(selection.upperBound.timeIntervalSince1970)
+                let rect = CGRect(x: left, y: top, width: width,
+                                  height: max(1, y(selection.lowerBound.timeIntervalSince1970) - top))
+                context.fill(Path(rect), with: .color(.accentColor.opacity(0.22)))
+                context.fill(Path(CGRect(x: left, y: rect.minY, width: 3, height: rect.height)),
+                             with: .color(.accentColor))
             }
 
             let barWidth = width - 16

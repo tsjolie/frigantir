@@ -99,4 +99,33 @@ private final class BundleToken {}
         #expect(config?.sampleRate == 16000)
         #expect(config?.channels == 1)
     }
+
+    // MARK: - Corrupt input (a broken or hostile server must not crash or hang the app)
+
+    @Test func ignoresA64BitBoxSizeTooLargeForInt() throws {
+        var box = Data([0, 0, 0, 1]) + Data("free".utf8)
+        box += Data(repeating: 0xFF, count: 8) // largesize = UInt64.max
+        #expect(try FMP4Demuxer().append(box).isEmpty)
+    }
+
+    @Test func rejectsABoxThatNeverCompletes() throws {
+        let demuxer = FMP4Demuxer()
+        // Claims 1 GB, then keeps sending.
+        _ = try demuxer.append(Data([0x40, 0, 0, 0]) + Data("mdat".utf8))
+        let chunk = Data(count: 4 * 1024 * 1024)
+        #expect(throws: FMP4Demuxer.DemuxError.self) {
+            for _ in 0 ..< 9 { _ = try demuxer.append(chunk) }
+        }
+    }
+
+    @Test func rejectsATrunSampleCountTheBoxCantHold() throws {
+        var data = try Self.fixture
+        let trun = try #require(data.range(of: Data("trun".utf8)))
+        // version/flags (4) after the type, then sample_count.
+        let count = trun.upperBound + 4
+        data.replaceSubrange(count ..< count + 4, with: [0xFF, 0xFF, 0xFF, 0xFF])
+        #expect(throws: FMP4Demuxer.DemuxError.malformed("trun sample count")) {
+            _ = try Self.demux(data)
+        }
+    }
 }

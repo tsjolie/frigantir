@@ -1,7 +1,7 @@
 # Frigantir — Support
 
 Frigantir is an iPhone and iPad app for viewing a **Frigate** network video recorder: live cameras,
-recordings, events and alerts.
+recordings, events, alerts and exports.
 
 ## Contact
 
@@ -26,14 +26,36 @@ Frigantir is an independent app. It isn't made by or affiliated with the Frigate
 
 ## Connecting to Frigate
 
-In the app's settings, under **Frigate server**:
+When you first open the app, it asks for your Frigate server. You can change it later in **Settings**, under
+**Frigate server**.
 
 1. Enter your Frigate address, for example `https://frigate.example.com` or `http://192.168.1.10:8971`.
-   Use Frigate's port **8971**, or the address of your reverse proxy in front of it.
+   Use Frigate's port **8971**, or the address of your reverse proxy in front of it. If you leave out
+   `https://`, the app adds it.
 2. Enter your username and password if Frigate's authentication is enabled.
-3. Save. Your cameras should appear on the dashboard.
+3. Tap **Connect** (or **Save** in Settings). Your cameras should appear on the dashboard. If the app can't
+   reach Frigate, it says why and lets you correct the address or sign-in.
 
 Addresses on the internet must use **HTTPS**. Plain `http://` works only for addresses on your local network.
+
+## Reviewing alerts
+
+The **Review** tab lists unreviewed alerts and detections from the last 24 hours. Swipe an item to mark it
+reviewed, or tap **Mark all reviewed** to mark every unreviewed alert (or detection) as reviewed, including
+older ones the list doesn't show.
+
+## Exports
+
+To save a clip, open a camera, tap the **History** button, then **Export**. Either choose **Select on
+Timeline** and scroll to the start and end, or **Enter Start and End** to type the times, down to the second.
+Frigate saves the export on your server.
+
+Exports appear in the **Exports** tab of the **Review** page, including ones made in Frigate's web interface.
+Open one to watch it, then:
+
+- **Download** saves the video to your photo library. Photos files it under the date it was *recorded*, so look
+  in the **Recently Saved** album rather than at today's photos.
+- **Share** sends it with AirDrop, Messages and more, or saves it to Files.
 
 ## Notifications (optional)
 
@@ -54,6 +76,9 @@ turn it on in iOS **Settings → Privacy & Security → Local Network**.
 
 **Sign-in fails.** Check the username and password by signing in to Frigate's web page in Safari. Make sure
 you're using port 8971 (the port with sign-in), not Frigate's internal port 5000.
+
+**A downloaded export isn't in Photos.** Look in the **Recently Saved** album, or at the day it was recorded.
+If the app says it isn't allowed to add to Photos, turn it on in iOS **Settings → Apps → Frigantir → Photos**.
 
 **Live video doesn't play.** Check that the same camera plays in Frigate's own web page. Frigantir uses the
 same live streams as Frigate's web interface.
