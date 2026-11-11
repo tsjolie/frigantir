@@ -71,13 +71,17 @@ nonisolated struct MediaDownload: Identifiable, Sendable {
     }
 }
 
-/// Downloads one file at a time, with progress, then opens the share sheet
-/// (Save to Photos, AirDrop, Save to Files and so on).
+/// Downloads one file at a time, with progress, then briefly says it's done
+/// and opens the share sheet (Save to Photos, AirDrop, Save to Files and so on).
 @Observable
 final class MediaDownloader {
     let downloader = ExportDownloader()
     private(set) var current: MediaDownload?
+    /// True for a moment after a download finishes, so even one too quick
+    /// for the progress bar shows that something happened.
+    private(set) var isShowingDone = false
     var error: String?
+    @ObservationIgnored private var shareTask: Task<Void, Never>?
 
     var progress: Double? {
         if case .downloading(let fraction) = downloader.state { fraction } else { nil }
@@ -91,13 +95,20 @@ final class MediaDownloader {
         exportLog.info("Downloading \(download.fileName, privacy: .public)")
         downloader.download(download.url, to: download.destination, client: client) { [weak self] result in
             guard let self else { return }
-            current = nil
             switch result {
             case .success(let file):
-                ShareSheet.present([file]) { [weak self] failure in
-                    if let failure { self?.error = failure.localizedDescription }
+                isShowingDone = true
+                shareTask = Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(0.8))
+                    guard let self, !Task.isCancelled else { return }
+                    isShowingDone = false
+                    current = nil
+                    ShareSheet.present([file]) { [weak self] failure in
+                        if let failure { self?.error = failure.localizedDescription }
+                    }
                 }
             case .failure(let failure):
+                current = nil
                 if (failure as? URLError)?.code == .cancelled { return }
                 exportLog.error("Download failed: \(failure.localizedDescription, privacy: .public)")
                 error = failure.localizedDescription
@@ -107,6 +118,9 @@ final class MediaDownloader {
 
     func cancel() {
         downloader.cancel()
+        shareTask?.cancel()
+        shareTask = nil
+        isShowingDone = false
         current = nil
     }
 }
@@ -151,8 +165,18 @@ extension View {
                 }
                 .padding()
                 .background(.bar)
+            } else if downloader.isShowingDone {
+                Label("Downloaded", systemImage: "checkmark.circle.fill")
+                    .font(.footnote.bold())
+                    .foregroundStyle(.green)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(.bar)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .animation(.default, value: downloader.isShowingDone)
+        .sensoryFeedback(.success, trigger: downloader.isShowingDone) { _, done in done }
         .alert("Couldn't Download", isPresented: Binding(get: { downloader.error != nil },
                                                          set: { if !$0 { downloader.error = nil } })) {
             Button("OK", role: .cancel) {}
