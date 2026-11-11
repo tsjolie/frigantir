@@ -1,3 +1,4 @@
+import AVKit
 import Foundation
 import Testing
 @testable import FrigateApp
@@ -200,5 +201,16 @@ import Testing
         #expect(snapshotsOnly.map(\.title) == ["Download Snapshot", "Download Clean Snapshot"])
         // Still being tracked: the snapshot can change, so it's fetched fresh.
         #expect(snapshotsOnly.allSatisfy { !$0.isFinal })
+    }
+}
+
+/// How recordings are played.
+@Suite struct RecordingPlayerTests {
+    /// Live Text scanning of a paused frame set up VisionKit on the main
+    /// thread, freezing the app for 6 s the first time after an install.
+    @Test func recordingsSkipLiveTextAnalysis() {
+        let controller = RecordingPlayerView.makeController()
+        #expect(!controller.allowsVideoFrameAnalysis)
+        #expect(!controller.allowsPictureInPicturePlayback)
     }
 }

@@ -12,9 +12,7 @@ struct RecordingPlayerView: UIViewControllerRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeUIViewController(context: Context) -> AVPlayerViewController {
-        let controller = AVPlayerViewController()
-        controller.allowsPictureInPicturePlayback = false
-        controller.canStartPictureInPictureAutomaticallyFromInline = false
+        let controller = Self.makeController()
         context.coordinator.controller = controller
         controller.player = makePlayer()
         controller.player?.play()
@@ -26,6 +24,17 @@ struct RecordingPlayerView: UIViewControllerRepresentable {
             controller.player = makePlayer()
             controller.player?.play()
         }
+    }
+
+    static func makeController() -> AVPlayerViewController {
+        let controller = AVPlayerViewController()
+        controller.allowsPictureInPicturePlayback = false
+        controller.canStartPictureInPictureAutomaticallyFromInline = false
+        // No Live Text / Visual Look Up on a paused frame: the first analysis
+        // after an install set VisionKit up on the main thread and froze the
+        // app for 6 s, and camera footage has nothing to look up.
+        controller.allowsVideoFrameAnalysis = false
+        return controller
     }
 
     static func dismantleUIViewController(_ controller: AVPlayerViewController, coordinator: Coordinator) {
