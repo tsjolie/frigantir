@@ -38,10 +38,50 @@ import Testing
         }
     }
 
+    /// "Show reviewed": both states, merged newest first, paged without
+    /// skipping anything when one state is much busier than the other.
+    @Test func pagesReviewedAndUnreviewedTogether() async throws {
+        // Unreviewed every minute; reviewed every 10 minutes, offset by 30 s.
+        let unreviewed = (0 ..< 200).map { 1_790_000_000 - Double($0) * 60 }
+        let reviewed = (0 ..< 20).map { 1_790_000_000 - 30 - Double($0) * 600 }
+        FakeFrigate.requests = []
+        FakeFrigate.respond = { @Sendable request in
+            let query = Dictionary(uniqueKeysWithValues: URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!
+                .queryItems!.map { ($0.name, $0.value ?? "") })
+            let before = query["before"].flatMap(Double.init) ?? .infinity
+            let limit = Int(query["limit"] ?? "50")!
+            let isReviewed = query["reviewed"] == "1"
+            let page = (isReviewed ? reviewed : unreviewed).filter { $0 < before }.prefix(limit)
+            return Data(("[" + page.map { Self.reviewJSON($0, reviewed: isReviewed) }.joined(separator: ",") + "]").utf8)
+        }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [FakeFrigate.self]
+        let client = FrigateClient(baseURL: URL(string: "https://frigate.example.com")!,
+                                   session: URLSession(configuration: configuration))
+
+        var all: [ReviewItem] = []
+        var before: Date?
+        for _ in 0 ..< 20 {
+            let page = try await client.reviewsIncludingReviewed(severity: .detection, before: before, limit: 50)
+            guard let last = page.last else { break }
+            #expect(page.map(\.startTime) == page.map(\.startTime).sorted(by: >))
+            all += page
+            before = last.startDate
+        }
+
+        #expect(Set(all.map(\.id)).count == all.count)
+        #expect(Set(all.map(\.startTime)) == Set(unreviewed + reviewed))
+        #expect(all.filter(\.hasBeenReviewed).count == reviewed.count)
+    }
+
     nonisolated static func reviewJSON(_ start: Double) -> String {
+        reviewJSON(start, reviewed: false)
+    }
+
+    nonisolated static func reviewJSON(_ start: Double, reviewed: Bool) -> String {
         """
         {"id":"\(start)-x","camera":"yard","start_time":\(start),"end_time":\(start + 10),"severity":"detection",
-         "thumb_path":"/media/frigate/clips/review/t.webp","has_been_reviewed":false,
+         "thumb_path":"/media/frigate/clips/review/t.webp","has_been_reviewed":\(reviewed),
          "data":{"objects":["person"],"zones":[],"audio":[],"detections":[]}}
         """
     }

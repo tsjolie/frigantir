@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// The PWA's Review page: unreviewed alerts and detections, newest first.
-/// Swipe to mark reviewed; tap to watch the recording; long-press to download
-/// it. A third tab lists the server's exports.
+/// The PWA's Review page: unreviewed alerts and detections, newest first, or
+/// reviewed ones too (dimmed, like the web UI's "Show reviewed"). Swipe to mark
+/// reviewed; tap to watch the recording; long-press to download it. A third
+/// tab lists the server's exports.
 struct ReviewListView: View {
     @Environment(AppModel.self) private var model
     @State private var tab = Tab.alerts
@@ -15,6 +16,7 @@ struct ReviewListView: View {
     @State private var isMarkingAll = false
     @State private var markAllError: String?
     @State private var downloader = MediaDownloader()
+    @AppStorage("showReviewed") private var showReviewed = false
 
     enum Tab: Hashable {
         case alerts, detections, exports
@@ -23,9 +25,14 @@ struct ReviewListView: View {
     /// Which reviews the list shows (the Exports tab has its own list).
     private var severity: ReviewItem.Severity { tab == .detections ? .detection : .alert }
 
-    /// Hides items just marked reviewed, even before the server confirms.
+    /// Hides items just marked reviewed, even before the server confirms,
+    /// unless reviewed items are shown.
     private var visibleItems: [ReviewItem] {
-        items.filter { !model.locallyReviewed.contains($0.id) }
+        showReviewed ? items : items.filter { !model.locallyReviewed.contains($0.id) }
+    }
+
+    private func isReviewed(_ item: ReviewItem) -> Bool {
+        item.hasBeenReviewed || model.locallyReviewed.contains(item.id)
     }
 
     var body: some View {
@@ -50,6 +57,10 @@ struct ReviewListView: View {
                     .pickerStyle(.segmented)
                 }
                 if tab != .exports {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Toggle("Show Reviewed", systemImage: showReviewed ? "eye" : "eye.slash", isOn: $showReviewed)
+                            .toggleStyle(.button)
+                    }
                     ToolbarItem(placement: .topBarTrailing) {
                         if isMarkingAll {
                             ProgressView()
@@ -67,10 +78,12 @@ struct ReviewListView: View {
     private var reviewList: some View {
         List {
             ForEach(visibleItems) { item in
-                NavigationLink(value: item) { ReviewRow(item: item) }
+                NavigationLink(value: item) { ReviewRow(item: item, isReviewed: isReviewed(item)) }
                     .swipeActions {
-                        Button("Reviewed", systemImage: "checkmark") { markReviewed([item]) }
-                            .tint(.green)
+                        if !isReviewed(item) {
+                            Button("Reviewed", systemImage: "checkmark") { markReviewed([item]) }
+                                .tint(.green)
+                        }
                     }
                     .contextMenu {
                         if let client = model.client {
@@ -88,6 +101,9 @@ struct ReviewListView: View {
                 if let error {
                     ContentUnavailableView("Couldn't load", systemImage: "exclamationmark.triangle",
                                            description: Text(error))
+                } else if showReviewed {
+                    ContentUnavailableView("Nothing yet", systemImage: "checkmark.circle",
+                                           description: Text("No \(severity.rawValue)s in the last 24 hours."))
                 } else {
                     ContentUnavailableView("All caught up", systemImage: "checkmark.circle",
                                            description: Text("No unreviewed \(severity.rawValue)s."))
@@ -105,7 +121,7 @@ struct ReviewListView: View {
             Text(markAllError ?? "")
         }
         .refreshable { await reload() }
-        .task(id: severity) { await reload() }
+        .task(id: "\(severity)|\(showReviewed)") { await reload() }
         // Frigate pushed a review change. It sends one every few seconds while
         // an event is in progress, so wait for a quiet second; a newer change
         // cancels the pending reload (and its request).
@@ -121,7 +137,7 @@ struct ReviewListView: View {
         loadGeneration += 1
         let generation = loadGeneration
         do {
-            let fetched = try await client.reviews(severity: severity)
+            let fetched = try await fetch(client, before: nil)
             guard generation == loadGeneration else { return }
             // Replacing the list with identical contents would cancel a swipe in progress.
             if fetched != items { items = fetched }
@@ -137,9 +153,15 @@ struct ReviewListView: View {
         guard canLoadMore, let client = model.client, let last = items.last else { return }
         // A failed request leaves paging on: the next time the last row
         // appears, it tries again.
-        guard let page = try? await client.reviews(severity: severity, before: last.startDate) else { return }
+        guard let page = try? await fetch(client, before: last.startDate) else { return }
         canLoadMore = !page.isEmpty
         items += page.filter { new in !items.contains { $0.id == new.id } }
+    }
+
+    private func fetch(_ client: FrigateClient, before: Date?) async throws -> [ReviewItem] {
+        showReviewed
+            ? try await client.reviewsIncludingReviewed(severity: severity, before: before)
+            : try await client.reviews(severity: severity, before: before)
     }
 
     private func markReviewed(_ reviewed: [ReviewItem]) {
@@ -159,6 +181,8 @@ struct ReviewListView: View {
 struct ReviewRow: View {
     @Environment(AppModel.self) private var model
     let item: ReviewItem
+    /// Reviewed rows are dimmed, as on the web UI.
+    var isReviewed = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -184,6 +208,7 @@ struct ReviewRow: View {
                 .font(.caption)
             }
         }
+        .opacity(isReviewed ? 0.5 : 1)
     }
 }
 

@@ -46,6 +46,26 @@ nonisolated struct FrigateClient: Sendable {
         return try await get("api/review", query: query)
     }
 
+    /// Reviewed and unreviewed items together, newest first, a page at a time
+    /// (pass the oldest item's start as `before` for the next page). Frigate
+    /// filters on one review state per request, so this asks for both. When one
+    /// state fills its page sooner, the other's older items are left for the
+    /// next page, so paging by the oldest item skips nothing.
+    func reviewsIncludingReviewed(severity: ReviewItem.Severity, before: Date? = nil,
+                                  limit: Int = 50) async throws -> [ReviewItem] {
+        async let unreviewed = reviews(severity: severity, reviewed: false, before: before, limit: limit)
+        async let reviewed = reviews(severity: severity, reviewed: true, before: before, limit: limit)
+        let pages = try await [unreviewed, reviewed]
+        // A full page may stop short of older items; nothing older than the
+        // newest such cut-off is complete yet.
+        let cutoff = pages.filter { $0.count == limit }.compactMap(\.last?.startTime).max()
+        var seen: Set<String> = []
+        return pages.joined()
+            .filter { item in cutoff.map { item.startTime >= $0 } ?? true }
+            .filter { seen.insert($0.id).inserted }
+            .sorted { $0.startTime > $1.startTime }
+    }
+
     /// Every unreviewed item of a severity, of any age, newest first, fetched
     /// a page at a time (the list screen only has the first page or two).
     func allUnreviewedReviews(severity: ReviewItem.Severity, pageSize: Int = 500) async throws -> [ReviewItem] {
