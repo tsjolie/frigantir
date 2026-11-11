@@ -10,6 +10,8 @@ options:
   groupSortPosition: top
 
 packages:
+  # Exact versions are locked in Package.resolved (Xcode Cloud requires it).
+  # After adding or updating a package, run `make lock` and commit it.
   # Code editor for the Frigate config screen, with tree-sitter YAML highlighting.
   Runestone:
     url: https://github.com/simonbs/Runestone

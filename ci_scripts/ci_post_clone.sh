@@ -14,3 +14,8 @@ brew install xcodegen
 
 cd "$CI_PRIMARY_REPOSITORY_PATH"
 xcodegen generate
+
+# Xcode Cloud won't resolve Swift packages itself; it needs the exact versions
+# in the generated project. They're kept in the committed Package.resolved.
+mkdir -p FrigateApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+cp Package.resolved FrigateApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
