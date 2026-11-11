@@ -7,6 +7,7 @@ struct ExploreView: View {
     @State private var camera: String?
     @State private var label: String?
     @State private var objects: [TrackedObject] = []
+    @State private var downloader = MediaDownloader()
 
     private static let commonLabels = ["person", "car", "dog", "cat", "package", "bird"]
 
@@ -14,8 +15,15 @@ struct ExploreView: View {
         NavigationStack {
             List(objects) { object in
                 NavigationLink(value: object) { TrackedObjectRow(object: object) }
+                    .contextMenu {
+                        if let client = model.client {
+                            MediaDownloadButtons(options: MediaDownload.options(for: object, client: client),
+                                                 downloader: downloader)
+                        }
+                    }
             }
             .listStyle(.plain)
+            .mediaDownloadStatus(downloader)
             .navigationTitle("Explore")
             .navigationDestination(for: TrackedObject.self) { TrackedObjectDetailView(object: $0) }
             .toolbar {
@@ -75,6 +83,7 @@ struct TrackedObjectRow: View {
 struct TrackedObjectDetailView: View {
     @Environment(AppModel.self) private var model
     let object: TrackedObject
+    @State private var downloader = MediaDownloader()
 
     var body: some View {
         List {
@@ -100,5 +109,17 @@ struct TrackedObjectDetailView: View {
         }
         .navigationTitle((object.subLabel ?? object.label).capitalized)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let client = model.client, object.hasClip || object.hasSnapshot {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu("Download", systemImage: "arrow.down.circle") {
+                        MediaDownloadButtons(options: MediaDownload.options(for: object, client: client),
+                                             downloader: downloader)
+                    }
+                    .disabled(downloader.current != nil)
+                }
+            }
+        }
+        .mediaDownloadStatus(downloader)
     }
 }

@@ -90,6 +90,9 @@ struct SettingsView: View {
                 Section {
                     NavigationLink("Notifications") { NotificationSettingsView() }
                     NavigationLink("System") { SystemView() }
+                    if model.canEditConfig {
+                        NavigationLink("Configuration") { ConfigEditorView() }
+                    }
                 }
             }
         }

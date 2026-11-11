@@ -31,6 +31,16 @@ nonisolated struct FrigateConfig: Decodable, Sendable {
     }
 }
 
+/// `/api/profile`. Frigate gives the `admin` role to its internal port and to
+/// servers without login too, so only other roles are restricted.
+nonisolated struct UserProfile: Decodable, Sendable, Equatable {
+    let username: String?
+    /// Missing before Frigate 0.16, which had no roles: every user was an admin.
+    let role: String?
+
+    var canEditConfig: Bool { role == nil || role == "admin" }
+}
+
 nonisolated struct CameraConfig: Decodable, Sendable, Identifiable, Hashable {
     let name: String
     let enabled: Bool
@@ -127,6 +137,12 @@ nonisolated struct ReviewItem: Decodable, Sendable, Identifiable, Hashable {
     var startDate: Date { Date(timeIntervalSince1970: startTime) }
     var isInProgress: Bool { endTime == nil }
     var labels: [String] { data.objects + data.audio }
+
+    /// What the player shows and exports save: the item plus 4 s either side.
+    var clipSpan: (start: Date, end: Date) {
+        let end = endTime.map(Date.init(timeIntervalSince1970:)) ?? .now
+        return (startDate.addingTimeInterval(-4), end.addingTimeInterval(4))
+    }
 }
 
 /// A tracked object (`/api/events`), shown on the Explore page.

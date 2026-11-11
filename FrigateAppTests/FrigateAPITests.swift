@@ -157,3 +157,48 @@ import Testing
         #expect(FrigateEventStream.decode("not json") == nil)
     }
 }
+
+/// Downloads offered on Review and Explore match Frigate's web UI.
+@Suite struct MediaDownloadTests {
+    let client = FrigateClient(baseURL: URL(string: "https://frigate.example.com")!)
+
+    @Test func reviewVideoCoversTheItemWithPadding() throws {
+        let json = """
+        {"id":"r1","camera":"driveway","start_time":1790128892.4,"end_time":1790128900.2,"severity":"alert",
+         "thumb_path":"/media/frigate/clips/review/t.webp",
+         "data":{"detections":[],"objects":["person"],"zones":[],"audio":[]}}
+        """
+        let item = try JSONDecoder().decode(ReviewItem.self, from: Data(json.utf8))
+        let options = MediaDownload.options(for: item, client: client)
+        let video = try #require(options.first)
+        #expect(options.count == 1)
+        #expect(video.url.absoluteString
+            == "https://frigate.example.com/api/driveway/start/1790128888/end/1790128905/clip.mp4")
+        #expect(video.fileName.hasPrefix("driveway_") && video.fileName.hasSuffix(".mp4"))
+        #expect(video.isFinal)
+    }
+
+    @Test func trackedObjectOffersWhatItHas() throws {
+        let json = """
+        [{"id":"o1","camera":"yard","label":"person","sub_label":null,"zones":[],"start_time":1790128892.0,
+          "end_time":1790128900.0,"has_clip":true,"has_snapshot":true,"data":{}},
+         {"id":"o2","camera":"yard","label":"dog","sub_label":null,"zones":[],"start_time":1790128892.0,
+          "end_time":null,"has_clip":false,"has_snapshot":true,"data":{}}]
+        """
+        let objects = try JSONDecoder().decode([TrackedObject].self, from: Data(json.utf8))
+        let both = MediaDownload.options(for: objects[0], client: client)
+        #expect(both.map(\.title) == ["Download Video", "Download Snapshot", "Download Clean Snapshot"])
+        #expect(both[0].url.absoluteString
+            == "https://frigate.example.com/api/yard/start/1790128888/end/1790128904/clip.mp4")
+        #expect(both[1].url.absoluteString
+            == "https://frigate.example.com/api/events/o1/snapshot.jpg?crop=0&bbox=1&timestamp=0")
+        #expect(both[1].fileName == "yard_person.jpg")
+        #expect(both[2].url.absoluteString == "https://frigate.example.com/api/events/o1/snapshot-clean.webp")
+        #expect(both[2].fileName == "yard_person-clean.webp")
+
+        let snapshotsOnly = MediaDownload.options(for: objects[1], client: client)
+        #expect(snapshotsOnly.map(\.title) == ["Download Snapshot", "Download Clean Snapshot"])
+        // Still being tracked: the snapshot can change, so it's fetched fresh.
+        #expect(snapshotsOnly.allSatisfy { !$0.isFinal })
+    }
+}

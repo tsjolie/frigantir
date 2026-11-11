@@ -9,6 +9,19 @@ options:
   createIntermediateGroups: true
   groupSortPosition: top
 
+packages:
+  # Code editor for the Frigate config screen, with tree-sitter YAML highlighting.
+  Runestone:
+    url: https://github.com/simonbs/Runestone
+    from: 0.5.2
+  TreeSitterLanguages:
+    url: https://github.com/simonbs/TreeSitterLanguages
+    from: 0.1.10
+  # YAML parser; flags syntax errors in the config editor as you type.
+  Yams:
+    url: https://github.com/jpsim/Yams
+    from: 6.2.2
+
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -31,6 +44,10 @@ targets:
       - FrigateApp
     dependencies:
       - target: FrigantirNotificationService
+      - package: Runestone
+      - package: TreeSitterLanguages
+        product: TreeSitterYAMLRunestone
+      - package: Yams
     entitlements:
       path: FrigateApp/FrigateApp.entitlements
       properties:

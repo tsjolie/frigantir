@@ -10,6 +10,8 @@ final class AppModel {
     private(set) var config: FrigateConfig?
     private(set) var loadError: String?
     private(set) var reviewSummary: ReviewSummary?
+    /// The logged-in user; nil until loaded, or if Frigate didn't say.
+    private(set) var profile: UserProfile?
     /// Incremented whenever Frigate pushes a review update, so lists can reload.
     private(set) var reviewsRevision = 0
     /// Cameras with motion or moving objects; drives live dashboard previews.
@@ -29,6 +31,8 @@ final class AppModel {
     private(set) var presentedReviewID: String?
 
     var isConfigured: Bool { client != nil }
+    /// Frigate only lets admins read or save the config file.
+    var canEditConfig: Bool { profile?.canEditConfig == true }
 
     init() {
         client = Self.makeClient(settings)
@@ -105,6 +109,7 @@ final class AppModel {
         if let password { Keychain.setPassword(password, for: settings.username) }
         settings.save()
         self.settings = settings
+        profile = nil
         playback.settings = settings
         client = Self.makeClient(settings)
         await reload()
@@ -143,7 +148,9 @@ final class AppModel {
             config = try await client.config()
             loadError = nil
             connectEvents(client)
+            async let profile = Self.loadProfile(client)
             await refreshSummary()
+            self.profile = await profile
         } catch {
             loadError = error.localizedDescription
         }
@@ -275,6 +282,17 @@ final class AppModel {
         updated.preferredStreams[camera.name] = stream
         updated.save()
         settings = updated
+    }
+
+    /// Frigate before 0.14 has no login and no `/api/profile`; everyone is an admin.
+    private nonisolated static func loadProfile(_ client: FrigateClient) async -> UserProfile? {
+        do {
+            return try await client.profile()
+        } catch FrigateClient.ClientError.http(404, _) {
+            return UserProfile(username: nil, role: nil)
+        } catch {
+            return nil
+        }
     }
 
     /// `password` overrides the one saved in the Keychain for the username.

@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// The PWA's Review page: unreviewed alerts and detections, newest first.
-/// Swipe to mark reviewed; tap to watch the recording. A third tab lists the
-/// server's exports.
+/// Swipe to mark reviewed; tap to watch the recording; long-press to download
+/// it. A third tab lists the server's exports.
 struct ReviewListView: View {
     @Environment(AppModel.self) private var model
     @State private var tab = Tab.alerts
@@ -14,6 +14,7 @@ struct ReviewListView: View {
     @State private var isConfirmingMarkAll = false
     @State private var isMarkingAll = false
     @State private var markAllError: String?
+    @State private var downloader = MediaDownloader()
 
     enum Tab: Hashable {
         case alerts, detections, exports
@@ -71,10 +72,17 @@ struct ReviewListView: View {
                         Button("Reviewed", systemImage: "checkmark") { markReviewed([item]) }
                             .tint(.green)
                     }
+                    .contextMenu {
+                        if let client = model.client {
+                            MediaDownloadButtons(options: MediaDownload.options(for: item, client: client),
+                                                 downloader: downloader)
+                        }
+                    }
                     .onAppear { if item == visibleItems.last { Task { await loadMore() } } }
             }
         }
         .listStyle(.plain)
+        .mediaDownloadStatus(downloader)
         .overlay {
             if visibleItems.isEmpty {
                 if let error {
@@ -182,6 +190,7 @@ struct ReviewRow: View {
 struct ReviewDetailView: View {
     @Environment(AppModel.self) private var model
     let item: ReviewItem
+    @State private var downloader = MediaDownloader()
 
     var body: some View {
         List {
@@ -199,6 +208,18 @@ struct ReviewDetailView: View {
         }
         .navigationTitle(item.severity == .alert ? "Alert" : "Detection")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let client = model.client {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu("Download", systemImage: "arrow.down.circle") {
+                        MediaDownloadButtons(options: MediaDownload.options(for: item, client: client),
+                                             downloader: downloader)
+                    }
+                    .disabled(downloader.current != nil)
+                }
+            }
+        }
+        .mediaDownloadStatus(downloader)
         .task {
             model.markReviewed([item])
         }

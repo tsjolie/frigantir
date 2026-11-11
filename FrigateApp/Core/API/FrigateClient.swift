@@ -151,6 +151,34 @@ nonisolated struct FrigateClient: Sendable {
         try await get("api/stats")
     }
 
+    /// Who Frigate thinks is logged in, and their role.
+    func profile() async throws -> UserProfile {
+        try await get("api/profile")
+    }
+
+    /// The config file exactly as written on the server (admins only).
+    func rawConfig() async throws -> String {
+        let (data, _) = try await perform(URLRequest(url: url("api/config/raw")), retryAuth: true)
+        // Frigate sends the file as a JSON string; older versions sent plain text.
+        if let text = try? JSONDecoder().decode(String.self, from: data) { return text }
+        return String(bytes: data, encoding: .utf8) ?? ""
+    }
+
+    /// Replaces the config file. Frigate checks the new config first and keeps
+    /// the old one if it's invalid, throwing `.server` with the reasons. Returns
+    /// Frigate's confirmation message.
+    func saveConfig(_ yaml: String, restart: Bool) async throws -> String {
+        var request = URLRequest(url: url("api/config/save", query: [
+            URLQueryItem(name: "save_option", value: restart ? "restart" : "saveonly"),
+        ]))
+        request.httpMethod = "POST"
+        request.setValue("text/plain", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data(yaml.utf8)
+        let (data, _) = try await perform(request, retryAuth: true)
+        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        return json?["message"] as? String ?? "Config saved."
+    }
+
     /// Frigate ≥ 0.14 auth: exchanges credentials for a `frigate_token` cookie.
     func login() async throws {
         guard let username, let password, !username.isEmpty else { throw ClientError.unauthorized }
@@ -196,6 +224,21 @@ nonisolated struct FrigateClient: Sendable {
         url("api/events/\(object.id)/thumbnail.webp")
     }
 
+    /// The full-size snapshot Frigate's web UI downloads: uncropped, with the
+    /// object's box and without the timestamp.
+    func snapshotDownloadURL(_ object: TrackedObject) -> URL {
+        url("api/events/\(object.id)/snapshot.jpg", query: [
+            URLQueryItem(name: "crop", value: "0"),
+            URLQueryItem(name: "bbox", value: "1"),
+            URLQueryItem(name: "timestamp", value: "0"),
+        ])
+    }
+
+    /// The snapshot without anything drawn on it.
+    func cleanSnapshotURL(_ object: TrackedObject) -> URL {
+        url("api/events/\(object.id)/snapshot-clean.webp")
+    }
+
     /// HLS playlist of recordings for a time range, served by Frigate's nginx-vod
     /// module. AVPlayer plays it natively (hardware decode, PiP, AirPlay).
     func recordingPlaylistURL(camera: String, start: Date, end: Date) -> URL {
@@ -203,10 +246,14 @@ nonisolated struct FrigateClient: Sendable {
     }
 
     func reviewPlaylistURL(_ item: ReviewItem) -> URL {
-        let end = item.endTime.map(Date.init(timeIntervalSince1970:)) ?? .now
-        return recordingPlaylistURL(camera: item.camera,
-                                    start: item.startDate.addingTimeInterval(-4),
-                                    end: end.addingTimeInterval(4))
+        let span = item.clipSpan
+        return recordingPlaylistURL(camera: item.camera, start: span.start, end: span.end)
+    }
+
+    /// The recordings for a time range as one MP4 file, made on request
+    /// without saving an export on the server.
+    func recordingClipURL(camera: String, start: Date, end: Date) -> URL {
+        url("api/\(camera)/start/\(Int(start.timeIntervalSince1970))/end/\(Int(end.timeIntervalSince1970.rounded(.up)))/clip.mp4")
     }
 
     /// go2rtc's MSE WebSocket, proxied by Frigate's nginx at /live/mse.

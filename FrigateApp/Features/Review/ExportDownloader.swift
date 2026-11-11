@@ -43,14 +43,20 @@ final class ExportDownloader {
 
     func download(_ export: FrigateExport, client: FrigateClient,
                   completion: @escaping @MainActor @Sendable (Result<URL, Error>) -> Void) {
-        let destination = Self.file(for: export)
+        download(client.exportVideoURL(export), to: Self.file(for: export), client: client, completion: completion)
+    }
+
+    /// Downloads any Frigate file, say a clip made on request, unless
+    /// `destination` already has it.
+    func download(_ url: URL, to destination: URL, client: FrigateClient,
+                  completion: @escaping @MainActor @Sendable (Result<URL, Error>) -> Void) {
         if FileManager.default.fileExists(atPath: destination.path) {
-            exportLog.info("Using the earlier download of \(export.id, privacy: .public)")
+            exportLog.info("Using the earlier download of \(destination.lastPathComponent, privacy: .public)")
             state = .finished(destination)
             completion(.success(destination))
             return
         }
-        let request = URLRequest(url: client.exportVideoURL(export))
+        let request = URLRequest(url: url)
         start(request, to: destination) { [weak self] result in
             guard let self else { return }
             // The auth cookie may have expired; log in once and try again.
