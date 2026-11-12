@@ -57,12 +57,14 @@ struct ConfigEditorView: View {
             saveError = nil
             saveErrorLine = nil
         }
-        .confirmationDialog("Restart Frigate?", isPresented: $confirmRestart, titleVisibility: .visible) {
+        .alert("Restart Frigate?", isPresented: $confirmRestart) {
+            Button("Cancel", role: .cancel) {}
             Button("Save & Restart") { save(restart: true) }
         } message: {
             Text("Cameras stop recording and detecting until Frigate is back, which can take up to a minute.")
         }
-        .confirmationDialog("Discard your changes?", isPresented: $confirmDiscard, titleVisibility: .visible) {
+        .alert("Discard your changes?", isPresented: $confirmDiscard) {
+            Button("Keep Editing", role: .cancel) {}
             Button("Discard Changes", role: .destructive) { dismiss() }
         }
         .alert("Config Saved", isPresented: Binding(get: { savedMessage != nil },

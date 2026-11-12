@@ -34,9 +34,10 @@ struct ExportsList: View {
                 }
             }
         }
-        .confirmationDialog("Delete \"\(pendingDelete?.displayName ?? "")\" from the server?",
-                            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
-                            titleVisibility: .visible, presenting: pendingDelete) { export in
+        .alert("Delete \"\(pendingDelete?.displayName ?? "")\" from the server?",
+               isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+               presenting: pendingDelete) { export in
+            Button("Cancel", role: .cancel) {}
             Button("Delete Export", role: .destructive) { Task { await delete(export) } }
         }
         .refreshable { await load() }
@@ -169,8 +170,8 @@ struct ExportDetailView: View {
         }
         .navigationTitle(export.displayName)
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog("Delete this export from the server?", isPresented: $isConfirmingDelete,
-                            titleVisibility: .visible) {
+        .alert("Delete this export from the server?", isPresented: $isConfirmingDelete) {
+            Button("Cancel", role: .cancel) {}
             Button("Delete Export", role: .destructive) { Task { await delete() } }
         }
         .onAppear {

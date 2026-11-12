@@ -110,8 +110,10 @@ struct ReviewListView: View {
                 }
             }
         }
-        .confirmationDialog("Mark every unreviewed \(severity.rawValue) as reviewed?",
-                            isPresented: $isConfirmingMarkAll, titleVisibility: .visible) {
+        // An alert, not a confirmation dialog: on iOS 26 that's a popover whose
+        // arrow points at the list instead of the toolbar button.
+        .alert("Mark every unreviewed \(severity.rawValue) as reviewed?", isPresented: $isConfirmingMarkAll) {
+            Button("Cancel", role: .cancel) {}
             Button("Mark All Reviewed") { Task { await markAllReviewed() } }
         }
         .alert("Couldn't mark all reviewed", isPresented: Binding(get: { markAllError != nil },
