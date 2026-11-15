@@ -20,6 +20,10 @@ final class LivePlayer: Identifiable {
     var isMuted = false {
         didSet { engine.setMuted(isMuted) }
     }
+    /// 0…1, relative to the device volume.
+    var volume: Float = 1 {
+        didSet { engine.setVolume(volume) }
+    }
 
     var id: String { stream }
 
@@ -27,7 +31,7 @@ final class LivePlayer: Identifiable {
     var onPictureInPictureChanged: ((Bool) -> Void)?
 
     @ObservationIgnored private let engine: LiveStreamEngine
-    @ObservationIgnored private let request: URLRequest
+    @ObservationIgnored private var request: URLRequest
 
     /// `isPreview`: a silent dashboard tile, with no audio and no Picture in Picture.
     /// `reauthorize` logs in to Frigate again when the stream is refused (see
@@ -78,6 +82,14 @@ final class LivePlayer: Identifiable {
     }
 
     func resyncToLive() { engine.resync() }
+
+    /// Moves the stream to another server address. A paused player uses it
+    /// when it plays again.
+    func changeRequest(_ request: URLRequest) {
+        guard request.url != self.request.url else { return }
+        self.request = request
+        if !isPaused { engine.replaceRequest(request) }
+    }
 
     /// Gives up audio to another app while video keeps playing (e.g. in PiP).
     func suspendAudio() {

@@ -78,6 +78,15 @@ struct CameraLiveView: View {
     }
 
     private func controls(_ player: LivePlayer) -> some View {
+        VStack(spacing: 12) {
+            buttons(player)
+            volumeSlider(player)
+        }
+        .foregroundStyle(.white)
+        .padding()
+    }
+
+    private func buttons(_ player: LivePlayer) -> some View {
         HStack(spacing: 32) {
             Button { player.isPaused ? player.play() : player.pause() } label: {
                 Image(systemName: player.isPaused ? "play.fill" : "pause.fill")
@@ -96,8 +105,27 @@ struct CameraLiveView: View {
             }
         }
         .font(.title2)
-        .foregroundStyle(.white)
-        .padding()
+    }
+
+    /// Dragging it up unmutes; the level is remembered per camera.
+    private func volumeSlider(_ player: LivePlayer) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "speaker.fill")
+            Slider(value: Binding {
+                player.isMuted ? 0 : Double(player.volume)
+            } set: { value in
+                // At zero it mutes but keeps the last level, so unmuting isn't silent.
+                if value > 0 { player.volume = Float(value) }
+                player.isMuted = value == 0
+            }, in: 0 ... 1) { editing in
+                if !editing { CameraVolumes.setVolume(player.volume, for: camera.name) }
+            }
+            .tint(.white)
+            .accessibilityLabel("Volume")
+            Image(systemName: "speaker.wave.3.fill")
+        }
+        .font(.footnote)
+        .disabled(player.isAudioSuspended)
     }
 
     @ToolbarContentBuilder

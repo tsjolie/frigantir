@@ -6,6 +6,10 @@ struct ServerSettings: Codable, Equatable, Sendable {
     /// Frigate's authenticated UI/API port (8971) or a reverse proxy in front of it,
     /// e.g. `https://frigate.example.com`.
     var baseURL: URL?
+    /// Used while `baseURL` can't be reached, like Home Assistant's internal and
+    /// external URLs: e.g. a LAN address first, then a public one away from home.
+    /// Optional, so settings saved before it existed still decode.
+    var fallbackURL: URL?
     var username: String = ""
     /// Reconnect in audio-only mode after the app has been in the background
     /// without PiP for this long. `nil` keeps the full stream (video decoding is
@@ -51,6 +55,22 @@ extension URL {
         // Paths are appended to the base URL; a trailing slash would double up.
         while components.path.hasSuffix("/") { components.path.removeLast() }
         return components.url
+    }
+}
+
+/// Per-camera live audio volume (0…1), remembered across launches.
+enum CameraVolumes {
+    private static let defaultsKey = "cameraVolumes"
+
+    static func volume(for camera: String) -> Float {
+        let volumes = UserDefaults.standard.dictionary(forKey: defaultsKey) as? [String: Double]
+        return Float(volumes?[camera] ?? 1)
+    }
+
+    static func setVolume(_ volume: Float, for camera: String) {
+        var volumes = UserDefaults.standard.dictionary(forKey: defaultsKey) as? [String: Double] ?? [:]
+        volumes[camera] = Double(volume)
+        UserDefaults.standard.set(volumes, forKey: defaultsKey)
     }
 }
 

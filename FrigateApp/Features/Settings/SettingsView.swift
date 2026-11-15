@@ -5,6 +5,7 @@ struct SettingsView: View {
     var isOnboarding = false
 
     @State private var urlText = ""
+    @State private var fallbackText = ""
     @State private var username = ""
     @State private var password = ""
     @State private var keepAudio = true
@@ -22,12 +23,22 @@ struct SettingsView: View {
                     .textContentType(.URL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                TextField("Fallback address (optional)", text: $fallbackText)
+                    .keyboardType(.URL)
+                    .textContentType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
                 TextField("Username (if auth is enabled)", text: $username)
                     .textContentType(.username)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                 SecureField("Password", text: $password)
                     .textContentType(.password)
+                if !isOnboarding, model.isUsingFallbackAddress {
+                    Label("Connected through the fallback address", systemImage: "arrow.triangle.branch")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             } header: {
                 Text("Frigate server")
             } footer: {
@@ -35,6 +46,10 @@ struct SettingsView: View {
                     Enter Frigate's address, e.g. frigate.example.com or 192.168.1.10:8971. HTTPS is used \
                     unless the address starts with http://. Use Frigate's port 8971 (or your reverse proxy). \
                     Live video uses go2rtc through Frigate at /live/mse.
+
+                    The fallback address is used whenever the first one can't be reached, e.g. a local \
+                    address first and a public one for when you're away from home. The app checks again \
+                    when the network changes and when it opens.
                     """)
             }
 
@@ -99,11 +114,13 @@ struct SettingsView: View {
         .navigationTitle(isOnboarding ? "Connect to Frigate" : "Settings")
         .onAppear(perform: loadFields)
         .onChange(of: urlText) { urlError = nil }
+        .onChange(of: fallbackText) { urlError = nil }
     }
 
     private func loadFields() {
         let settings = model.settings
         urlText = settings.baseURL?.absoluteString ?? ""
+        fallbackText = settings.fallbackURL?.absoluteString ?? ""
         username = settings.username
         keepAudio = settings.keepAudioWhenLeavingCamera
         audioOnlyInBackground = settings.audioOnlyAfterBackgroundSeconds != nil
@@ -116,11 +133,21 @@ struct SettingsView: View {
                 : "That isn't a valid address. Try something like frigate.example.com or https://192.168.1.10:8971."
             return
         }
+        var fallback: URL?
+        if !fallbackText.trimmingCharacters(in: .whitespaces).isEmpty {
+            guard let url = URL.serverAddress(fallbackText) else {
+                urlError = "The fallback address isn't valid. Try something like frigate.example.com."
+                return
+            }
+            fallback = url
+        }
         // Show what will be used, e.g. with https:// added.
         urlText = url.absoluteString
+        fallbackText = fallback?.absoluteString ?? ""
         urlError = nil
         var settings = model.settings
         settings.baseURL = url
+        settings.fallbackURL = fallback
         settings.username = username
         settings.keepAudioWhenLeavingCamera = keepAudio
         settings.audioOnlyAfterBackgroundSeconds = audioOnlyInBackground ? 10 : nil

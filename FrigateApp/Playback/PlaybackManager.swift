@@ -21,6 +21,8 @@ final class PlaybackManager {
     var cameraToPresent: String?
 
     @ObservationIgnored var settings = ServerSettings.load()
+    /// The client the active player streams from.
+    @ObservationIgnored private var client: FrigateClient?
     @ObservationIgnored private let audio = AudioSessionController()
     @ObservationIgnored private var backgroundTask: Task<Void, Never>?
     @ObservationIgnored private var isInBackground = false
@@ -64,8 +66,11 @@ final class PlaybackManager {
         }
         active?.close()
 
+        self.client = client
+        // Logs in at whichever address the stream is on by then.
         let player = LivePlayer(camera: camera, stream: stream, request: client.liveStreamRequest(stream: stream),
-                                reauthorize: { try? await client.login() })
+                                reauthorize: { [weak self] in try? await self?.client?.login() })
+        player.volume = CameraVolumes.volume(for: camera)
         player.onPictureInPictureChanged = { [weak self, weak player] isActive in
             guard let self, let player else { return }
             // PiP closed while the camera screen is gone: nothing is showing it anymore.
@@ -93,6 +98,14 @@ final class PlaybackManager {
         player.play()
         refreshNowPlaying()
         return player
+    }
+
+    /// The app switched server address (e.g. between the main and fallback
+    /// ones on leaving Wi-Fi): keep the playing camera going on the new one.
+    func serverChanged(_ client: FrigateClient) {
+        self.client = client
+        guard let active else { return }
+        active.changeRequest(client.liveStreamRequest(stream: active.stream))
     }
 
     /// Called when a camera screen disappears.

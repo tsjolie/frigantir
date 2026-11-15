@@ -214,6 +214,22 @@ nonisolated final class LiveStreamEngine: NSObject, @unchecked Sendable {
         queue.async { [self] in audioRenderer.isMuted = muted }
     }
 
+    /// 0…1, relative to the device volume.
+    func setVolume(_ volume: Float) {
+        queue.async { [self] in audioRenderer.volume = volume }
+    }
+
+    /// Points the stream at another URL (the server's fallback address, say),
+    /// reconnecting at once if it's running and keeping the media mode.
+    func replaceRequest(_ request: URLRequest) {
+        queue.async { [self] in
+            guard self.request != nil else { return }
+            self.request = request
+            attempt = 0
+            connect()
+        }
+    }
+
     /// Jump to the live edge, e.g. after an audio interruption ends.
     func resync() {
         queue.async { [self] in

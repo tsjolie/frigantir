@@ -337,3 +337,27 @@ nonisolated struct FrigateClient: Sendable {
         return (data, http)
     }
 }
+
+/// Picks which configured server address to use.
+nonisolated enum ServerReachability {
+    /// Short timeouts: a LAN address that isn't there shouldn't hold up the
+    /// switch to the fallback for long.
+    private static let session: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 4
+        configuration.timeoutIntervalForResource = 6
+        configuration.waitsForConnectivity = false
+        return URLSession(configuration: configuration)
+    }()
+
+    /// The first address that answers, in order, or nil if none do. Any HTTP
+    /// response counts, including 401: the server is there, it just wants a login.
+    static func firstReachable(_ addresses: [URL], session: URLSession = session) async -> URL? {
+        for address in addresses {
+            var request = URLRequest(url: address.appending(path: "api/version"))
+            request.httpMethod = "GET"
+            if (try? await session.data(for: request))?.1 is HTTPURLResponse { return address }
+        }
+        return nil
+    }
+}

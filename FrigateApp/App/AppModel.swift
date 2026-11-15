@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import Observation
 import SwiftUI
 
@@ -22,6 +23,12 @@ final class AppModel {
     @ObservationIgnored private var summaryRequest = 0
     @ObservationIgnored private var reviewWritesInFlight = 0
     @ObservationIgnored private var pendingSummaryRefresh: Task<Void, Never>?
+    /// Only the newest address check may switch the client.
+    @ObservationIgnored private var addressCheck = 0
+    @ObservationIgnored private var isInBackground = false
+    @ObservationIgnored private let pathMonitor = NWPathMonitor()
+    @ObservationIgnored private var pendingPathCheck: Task<Void, Never>?
+    @ObservationIgnored private var hasSeenFirstPath = false
 
     let playback = PlaybackManager()
     let events = FrigateEventStream()
@@ -31,6 +38,10 @@ final class AppModel {
     private(set) var presentedReviewID: String?
 
     var isConfigured: Bool { client != nil }
+    /// Connected through the fallback address because the main one can't be reached.
+    var isUsingFallbackAddress: Bool {
+        settings.fallbackURL != nil && client?.baseURL == settings.fallbackURL && settings.fallbackURL != settings.baseURL
+    }
     /// Frigate only lets admins read or save the config file.
     var canEditConfig: Bool { profile?.canEditConfig == true }
 
@@ -48,6 +59,45 @@ final class AppModel {
             reviewsRevision += 1
             scheduleSummaryRefresh()
         }
+        // Joining or leaving Wi-Fi is when the main address comes and goes.
+        pathMonitor.pathUpdateHandler = { [weak self] _ in
+            Task { @MainActor in self?.networkChanged() }
+        }
+        pathMonitor.start(queue: .main)
+    }
+
+    /// Checks the addresses again once the network has settled for a moment.
+    /// In the background this only moves a playing camera to the new address;
+    /// the rest catches up when the app comes back.
+    private func networkChanged() {
+        // The first update only reports the network the app started on.
+        guard hasSeenFirstPath else { hasSeenFirstPath = true; return }
+        guard settings.fallbackURL != nil else { return }
+        pendingPathCheck?.cancel()
+        pendingPathCheck = Task {
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            if await chooseAddress(), !isInBackground { await reload(checkAddress: false) }
+        }
+    }
+
+    /// With a fallback address set, uses the main address if it answers, else
+    /// the fallback. If neither answers, keeps the current one. Returns whether
+    /// the client changed.
+    @discardableResult
+    private func chooseAddress() async -> Bool {
+        guard let primary = settings.baseURL, let fallback = settings.fallbackURL, fallback != primary
+        else { return false }
+        addressCheck += 1
+        let check = addressCheck
+        let settings = settings
+        guard let reachable = await ServerReachability.firstReachable([primary, fallback]),
+              check == addressCheck, settings == self.settings, reachable != client?.baseURL,
+              let client = Self.makeClient(settings, baseURL: reachable)
+        else { return false }
+        self.client = client
+        playback.serverChanged(client)
+        return true
     }
 
     /// Frigate sends a review update every few seconds while an event is in
@@ -69,18 +119,24 @@ final class AppModel {
     func scenePhaseChanged(_ phase: ScenePhase) {
         switch phase {
         case .background:
+            isInBackground = true
             pendingSummaryRefresh?.cancel()
             events.disconnect()
         case .active:
-            guard let client else { return }
-            // Never reached the server (say, launched offline): try again now.
-            guard config != nil else {
-                Task { await reload() }
-                return
+            isInBackground = false
+            guard client != nil else { return }
+            Task {
+                // The network may have changed meanwhile (left home, say).
+                // Never reached the server (launched offline): try again now.
+                if await chooseAddress() || config == nil {
+                    await reload(checkAddress: false)
+                    return
+                }
+                guard let client else { return }
+                if !events.isRunning { connectEvents(client) }
+                reviewsRevision += 1 // lists reload what changed meanwhile
+                await refreshSummary()
             }
-            if !events.isRunning { connectEvents(client) }
-            reviewsRevision += 1 // lists reload what changed meanwhile
-            Task { await refreshSummary() }
         default:
             break
         }
@@ -98,7 +154,10 @@ final class AppModel {
     func update(settings: ServerSettings, password: String?, requireConnection: Bool = false) async -> Bool {
         if requireConnection {
             loadError = nil
-            guard let candidate = Self.makeClient(settings, password: password) else { return false }
+            let addresses = [settings.baseURL, settings.fallbackURL].compactMap(\.self)
+            let reachable = await ServerReachability.firstReachable(addresses)
+            guard let candidate = Self.makeClient(settings, baseURL: reachable, password: password)
+            else { return false }
             do {
                 _ = try await candidate.config()
             } catch {
@@ -113,6 +172,8 @@ final class AppModel {
         playback.settings = settings
         client = Self.makeClient(settings)
         await reload()
+        // After reload has picked the address, so a playing camera moves once.
+        if let client { playback.serverChanged(client) }
         return true
     }
 
@@ -142,7 +203,8 @@ final class AppModel {
         return error.localizedDescription
     }
 
-    func reload() async {
+    func reload(checkAddress: Bool = true) async {
+        if checkAddress { await chooseAddress() }
         guard let client else { return }
         do {
             config = try await client.config()
@@ -295,9 +357,11 @@ final class AppModel {
         }
     }
 
-    /// `password` overrides the one saved in the Keychain for the username.
-    private static func makeClient(_ settings: ServerSettings, password: String? = nil) -> FrigateClient? {
-        guard let baseURL = settings.baseURL else { return nil }
+    /// `baseURL` defaults to the main address; `password` overrides the one
+    /// saved in the Keychain for the username.
+    private static func makeClient(_ settings: ServerSettings, baseURL: URL? = nil,
+                                   password: String? = nil) -> FrigateClient? {
+        guard let baseURL = baseURL ?? settings.baseURL else { return nil }
         let username = settings.username.isEmpty ? nil : settings.username
         return FrigateClient(baseURL: baseURL, username: username,
                              password: password ?? username.flatMap(Keychain.password(for:)))
