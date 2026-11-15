@@ -76,7 +76,8 @@ struct RootView: View {
 }
 
 /// Mini player shown above content while a camera keeps playing off-screen
-/// (baby-monitor mode). Tap to return to the camera; ✕ to stop.
+/// (baby-monitor mode). Tap to return to the camera; ✕ to stop. The speaker
+/// mutes, and the bar beside it sets the volume.
 struct NowPlayingBar: ViewModifier {
     @Environment(AppModel.self) private var model
 
@@ -98,7 +99,12 @@ struct NowPlayingBar: ViewModifier {
                     .buttonStyle(.plain)
                     Button { player.isMuted.toggle() } label: {
                         Image(systemName: player.isMuted ? "speaker.slash" : "speaker.wave.2")
+                            .accessibilityLabel(player.isMuted ? "Unmute" : "Mute")
                     }
+                    VolumeSlider(player: player, camera: player.camera)
+                        .frame(width: 110)
+                        .padding(.horizontal, 10) // room for the handle at either end
+                        .disabled(player.isAudioSuspended)
                     Button { model.playback.stop() } label: {
                         Image(systemName: "xmark")
                     }
